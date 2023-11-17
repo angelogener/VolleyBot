@@ -1,4 +1,4 @@
-from Player import Player
+from player import Player
 
 
 class Team:
@@ -15,11 +15,6 @@ class Team:
         self.players = []
         self.record = 0
         self.date = date
-
-    def __eq__(self, other):
-        if isinstance(other, Team):
-            return (self.name, self.players, self.record, self.date) == \
-                (other.name, other.players, other.record, other.date)
 
     def add_player(self, player: Player):
         """
@@ -38,22 +33,16 @@ class Team:
         if player in self.get_players():
             self.players.remove(player)
 
-    def team_win(self):
+    def play_team(self, is_winner: bool, opponent: int):
         """
-        Declares all players on a team as winners. Adds to total wins.
-        :return: Null
+        Calculates the new rank of the Team's Players. Refer to Player.play().
+        :param is_winner: True if Team won. False if the lost.
+        :param opponent: The Elo Ranking of the opponent(s).
+        :return: None.
         """
         self.record += 1
         for player in self.players:
-            player.win()
-
-    def team_loss(self):
-        """
-        Declares all players as losers.
-        :return: Null
-        """
-        for player in self.players:
-            player.loss()
+            player.play(is_winner, opponent)
 
     def get_players(self) -> list[Player]:
         """
@@ -75,3 +64,13 @@ class Team:
         :return: The number of wins by a team.
         """
         return self.record
+
+    def average_rating(self) -> int:
+        """
+        Returns the average rating of the Team.
+        :return: The average rating of all the Players.
+        """
+        value = 0
+        for player in self.players:
+            value += player.get_rating()
+        return value // len(self.players)

@@ -21,22 +21,22 @@ class Player:
         self.wins = won
         self.games_played = played
 
-    def play(self, winner: bool, opponent: int):
+    def play(self, is_winner: bool, opponent: int):
         """
         Calculates the new rank of the Player. Considers if the player won or not
         and the skill difference from two players. Adds result to the total
         games played and wins by the player
-        :param winner: True if Player won. False if they lost.
-        :param opponent: The Elo Ranking of the opponent(s)
-        :return: None
+        :param is_winner: True if Player won. False if they lost.
+        :param opponent: The Elo Ranking of the opponent(s).
+        :return: None.
         """
-        if winner:
+        if is_winner:
             self.games_played += 1
             self.wins += 1
         else:
             self.games_played += 1
 
-        self.rating = calculate_elo(self.rating, opponent, self.games_played, winner)
+        self.rating = calculate_elo(self.rating, opponent, self.games_played, is_winner)
 
     def win_rate(self) -> float:
         """
