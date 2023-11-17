@@ -14,9 +14,10 @@ class Player:
         wins (int): The Player's total wins to date.
     """
 
-    def __init__(self, disc_id, name, rating, won, played):
-        self.name = name
+    def __init__(self, disc_id: int, name: str, rating: int, won: int, played: int):
+
         self.disc_id = disc_id
+        self.name = name
         self.rating = rating
         self.wins = won
         self.games_played = played
@@ -74,7 +75,7 @@ class Player:
         """
         return self.name
 
-    def get_rating(self) -> str:
+    def get_rating(self) -> int:
         """
         Returns player's current elo rating.
         :return: Player's current elo rating.

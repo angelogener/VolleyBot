@@ -10,11 +10,11 @@ class Team:
         players (list[Player]): The list containing the Players in the team.
         record (int): The number of wins accumulated by this team.
     """
-    def __init__(self, name, date):
+    def __init__(self, name: str, date: str):
         self.name = name
+        self.date = date
         self.players = []
         self.record = 0
-        self.date = date
 
     def add_player(self, player: Player):
         """
@@ -70,7 +70,7 @@ class Team:
         Returns the average rating of the Team.
         :return: The average rating of all the Players.
         """
-        value = 0
-        for player in self.players:
-            value += player.get_rating()
-        return value // len(self.players)
+        if not self.players:
+            return 0
+        total_rating = sum(player.get_rating() for player in self.players)
+        return total_rating // len(self.players)

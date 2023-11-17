@@ -1,8 +1,13 @@
 import asyncio
 import discord
+
+import team_builder
+from game import Game
+from team import Team
+from player import Player
 from discord.ext import commands
 
-import teams
+from team_builder import generate_teams
 from load_file import load_data
 
 # Global Variables
@@ -13,6 +18,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 all_players = {}  # All users in server
 players = []  # Player ID's with their Names for team builder
+teams = []
 curr_guild = None
 in_channel = None
 out_channel = None
@@ -32,6 +38,7 @@ async def on_ready():
 
 @bot.command()
 async def shuffle(ctx):
+    global teams
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
@@ -45,12 +52,12 @@ async def shuffle(ctx):
         return
 
     # Now create teams...
-    server_names = []
+    curr_players = []
     for num in players:
-        server_names.append(all_players[num][0])
+        curr_players.append(all_players[num])
 
-    new_teams = teams.generate_teams(server_names)
-    result = teams.team_string(new_teams)
+    teams = generate_teams(curr_players)
+    result = team_builder.team_string(teams)
     # Simulate typing! Makes bot look busy
     async with out_channel.typing():
         await asyncio.sleep(2)
@@ -143,13 +150,13 @@ async def clear(ctx, value: int):
 
 async def update_players(ids: list[str]) -> None:
     """
-    Creates a dict of players who RSVP'd and compares them to the players in the .csv file
+    Creates a dict of Players who RSVP'd and compares them to the players in the .csv file
     (players = {}) to see if any changes are to be made.
     Changes are made IF:
         - The player has been saved but has changed their display name (1)
         - The player does not yet exist in the data (1)
 
-    Runs data through clean() to ensure we get the best possible username for teams and sharing
+    Runs data through clean() to ensure we get the best possible username for teams and sharing.
 
     :param ids: A list containing the id's of players.
     :return: None
@@ -160,19 +167,18 @@ async def update_players(ids: list[str]) -> None:
     for reacted in ids:
         member = await curr_guild.fetch_member(reacted)
 
-        # 1
-        if member.id in all_players and member.display_name != all_players[member.id][0]:
+        # 1: The player has been saved but has changed their display name
+        if member.id in all_players and member.display_name != all_players[member.id].name:
             if clean(member.display_name):
-                updated[member.id] = [member.display_name, all_players[member.id][1], all_players[member.id][2]]
-            else:
-                updated[member.id] = [member.name, all_players[member.id][1], all_players[member.id][2]]
+                # Changes all_players directly
+                all_players[member.id].name = member.display_name
 
-        # 2
+        # 2: The player does not yet exist in the data
         elif member.id not in all_players:
             if clean(member.display_name):
-                updated[member.id] = [member.display_name, 0, 0]
+                updated[member.id] = Player(member.id, member.display_name, 1200, 0, 0)
             else:
-                updated[member.id] = [member.name, 0, 0]
+                updated[member.id] = Player(member.id, member.name, 1200, 0, 0)
 
     all_players.update(updated)
 
