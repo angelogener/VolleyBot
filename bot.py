@@ -18,7 +18,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 all_players = {}  # All users in server
 players = []  # Player ID's with their Names for team builder
-teams = []
+teams = {}  # A list of Teams
+curr_game = None
 curr_guild = None
 in_channel = None
 out_channel = None
@@ -45,6 +46,10 @@ async def shuffle(ctx):
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         return
+
+    if not players:
+        await out_channel.send(f"Please update first!")
+        return
     # In the case we try to make teams with less than 12 players
     if len(players) < 12:
         await out_channel.send(f"You currently have **{len(players)} players.**\n"
@@ -63,6 +68,53 @@ async def shuffle(ctx):
         await asyncio.sleep(2)
 
     await out_channel.send(result)
+    return
+
+
+@bot.command()
+async def creategame(ctx, *, disc_teams: str):
+    """
+    Creates a Game object from the Two teams.
+    :param ctx: The message
+    :param disc_teams: The string containing the Teams to pit against.
+    :return: None
+    """
+    global curr_game
+
+    if not teams:
+        await out_channel.send("Please make teams first!")
+        return
+    opponents = disc_teams.lower().split(',')
+    gamers = []
+    # Handles case where there weren't exactly "teams" within the string
+    if len(opponents) != 2:
+        await out_channel.send("Must input two valid team names!")
+        return
+    # Off case where both strings identical. Weird right?
+    if opponents[0] == opponents[1]:
+        await out_channel.send("Can't have the team play itself! What?")
+        return
+
+    # Get the two Teams for the brawl! Checks if both teams exist in the current team dictionary
+    if opponents[0].strip() in teams:
+        gamers.append(teams[opponents[0].strip()])
+    else:
+        await out_channel.send("Game could not be played. Please add two valid teams.")
+        return
+
+    if opponents[1].strip() in teams:
+        gamers.append(teams[opponents[1].strip()])
+    else:
+        await out_channel.send("Game could not be played. Please add two valid teams.")
+        return
+
+    curr_game = Game(gamers[0], gamers[1])
+    # Simulate typing! Makes bot look busy
+    async with out_channel.typing():
+        await asyncio.sleep(2)
+    await out_channel.send(f"Prepare for the following matchup: \n"
+                           f"***Team {curr_game.team_one.get_team_name().title()}*** vs "
+                           f"***Team {curr_game.team_two.get_team_name().title()}***")
     return
 
 
@@ -171,16 +223,59 @@ async def update_players(ids: list[str]) -> None:
         if member.id in all_players and member.display_name != all_players[member.id].name:
             if clean(member.display_name):
                 # Changes all_players directly
-                all_players[member.id].name = member.display_name
+                all_players[member.id].name = member.display_name.lower()
 
         # 2: The player does not yet exist in the data
         elif member.id not in all_players:
             if clean(member.display_name):
-                updated[member.id] = Player(member.id, member.display_name, 1200, 0, 0)
+                updated[member.id] = Player(member.id, member.display_name.lower(), 1200, 0, 0)
             else:
-                updated[member.id] = Player(member.id, member.name, 1200, 0, 0)
+                updated[member.id] = Player(member.id, member.name.lower(), 1200, 0, 0)
 
     all_players.update(updated)
+
+
+@bot.command()
+async def winner(ctx, champ: str):
+    """
+    Declares the winning team of the game! Ensures all players from each team
+    gets their ratings updated
+    :param ctx: The message.
+    :param champ: The string representation of the winning team
+    :return: None
+    """
+    global curr_game
+    if not curr_game:
+        await out_channel.send("Please make a game first!")
+        return
+
+    if champ.lower() not in curr_game.get_team_names():
+        await out_channel.send(f"Please enter a valid winner!")
+        return
+
+    curr_game.play_game(champ.lower())
+    # Simulate typing! Makes bot look busy // ADDS SUSPENSE MUAHHAAH
+    async with out_channel.typing():
+        await asyncio.sleep(2)
+    await out_channel.send(f"Congratulations to ***{curr_game.get_winner().get_team_name()}*** for taking the cake!")
+    # Game is done! So we have no more current game!
+    curr_game = None
+
+
+@bot.command()
+async def delete(ctx, to_delete: str):
+    """
+    Delete the specified team.
+    :param ctx: The message
+    :param to_delete: The string representation of the team to be deleted
+    :return: None
+    """
+    global teams
+    if to_delete.lower() not in teams:
+        await out_channel.send(f"Please enter a valid team")
+        return
+
+    del teams[to_delete.lower()]
 
 
 def save_players():

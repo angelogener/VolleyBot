@@ -1,17 +1,19 @@
 import random
 from datetime import date
+from typing import Dict
+
 from player import Player
 from team import Team
 from game import Game
 import bot
 
-
+"""
 def generate_teams(people: list[Player]) -> list[Team]:
-    """
+    
     Generates random teams from a list of people attending a session.
     :param people: A list of Players
     :return: A list of Teams
-    """
+    
     teams = len(people) // 6
     team_lists = []
     counter = 0
@@ -30,20 +32,53 @@ def generate_teams(people: list[Player]) -> list[Team]:
         team_lists[counter].add_player(person)
         # Sets the first player of each team as it's respective captain.
         if len(team_lists[counter].get_players()) == 1:
-            team_lists[counter].name = f"Team {person.name}"
+            team_lists[counter].name = f"{person.name}"
         counter += 1
 
     return team_lists
+"""
 
 
-def team_string(teams: list[Team]) -> str:
+def generate_teams(people: list[Player]) -> dict[str, Team]:
+    """
+    Generates a dictionary of random teams from a list of people attending a session.
+    Captains will point to the teams.
+    :param people: A list of Players
+    :return: A list of Teams
+    """
+    teams = len(people) // 6
+    team_dict = {}
+    captains = []
+    counter = 0
+    # Randomizes list of players
+    random.shuffle(people)
+
+    # Get the team captains
+    i = 0
+    while i < teams:
+        curr_cap = people[i].get_name()
+        captains.append(curr_cap)
+        team_dict[curr_cap] = Team(curr_cap, date_string())
+        i += 1
+
+    # Numbers players as so: 1, 2, 3, 1, 2, 3 (etc. if at least 3 teams are made)
+    for person in people:
+        if counter == teams:
+            counter = 0
+        team_dict[captains[counter]].add_player(person)
+        counter += 1
+
+    return team_dict
+
+
+def team_string(teams: dict[str, Team]) -> str:
     formatted = f"The following teams on **{date_string()}** are: \n" + "\n"
-    for team in teams:
-        temp_team = team.get_players()
-        for player in temp_team:
-            # We assume that the first person is a team captain, list the number of players and re-add them
-            if player == temp_team[0]:
-                temp_string = f"***{team.get_team_name().title()}***" + f": **({len(temp_team)} Players)** \n"
+    for team, players in teams.items():
+        # We assume that the first person is a team captain, list the number of players (including them) and re-add
+        temp_string = f"***Team {team.title()}***" + f": **({len(players.get_players())} Players)** \n"
+        for player in players.get_players():
+
+            if player == players.get_players()[0]:
                 temp_string += f"***---------------***\n"
                 temp_string += f" - {player.get_name().title()}\n"
             # Otherwise we just add them as normal
@@ -53,7 +88,7 @@ def team_string(teams: list[Team]) -> str:
             formatted += temp_string
 
             # If we are past the first team, add a new line character
-            if player == temp_team[-1]:
+            if player == players.get_players()[-1]:
                 formatted += "\n"
     formatted += f"**Have fun!**"
     return formatted

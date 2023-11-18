@@ -1,7 +1,6 @@
 from team import Team
 
 
-
 class Game:
     """
     A Game between two Teams. Who will be the winner?
@@ -12,6 +11,7 @@ class Game:
         date(str): Date the game took place on.
         first_winner(bool): True if the team_one won. False if team_two won.
     """
+
     def __init__(self, team_one: Team, team_two: Team):
         self.team_one = team_one
         self.team_two = team_two
@@ -41,6 +41,9 @@ class Game:
 
     def get_teams(self) -> tuple[Team, Team]:
         return self.team_one, self.team_two
+
+    def get_team_names(self) -> tuple[str, str]:
+        return self.team_one.get_team_name(), self.team_two.get_team_name()
 
     def get_date(self) -> str:
         return self.date
