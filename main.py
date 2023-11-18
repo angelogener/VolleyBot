@@ -3,7 +3,7 @@ import atexit
 from game import Game
 from team import Team
 from player import Player
-from load_file import save_data, load_data
+from load_file import save_data
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':

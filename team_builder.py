@@ -1,42 +1,50 @@
 import random
 from datetime import date
-from typing import Dict
+from typing import Dict, Any
 
 from player import Player
 from team import Team
-from game import Game
-import bot
 
-"""
-def generate_teams(people: list[Player]) -> list[Team]:
-    
-    Generates random teams from a list of people attending a session.
+
+def generate_balanced(people: list[Player]) -> dict[str, Team]:
+    """
+    Generates a dictionary of balanced teams from a list of people attending a session.
+    Accounts for elo when making the teams. Higher rated players are split amongst each other
+    and algorithm continues as we proceed through the list.
+    Captains will point to the teams. Similar to generate_teams(), we want random team captains.
+    This is so better players aren't stuck being team captains all the time.
     :param people: A list of Players
-    :return: A list of Teams
-    
+    :return: A dict of Teams
+    """
     teams = len(people) // 6
-    team_lists = []
+    team_dict: dict[str, Team] = {}
+    temp_players = []
     counter = 0
-    # Randomizes list of players
-    random.shuffle(people)
+    balance = sorted(people, key=lambda x: x.rating, reverse=True)
 
-    # Instantiate empty teams
+    # Prepares lists
     for i in range(teams):
-        temp_team = Team("", date_string())
-        team_lists.append(temp_team)
+        temp_list = []
+        temp_players.append(temp_list)
 
     # Numbers players as so: 1, 2, 3, 1, 2, 3 (etc. if at least 3 teams are made)
-    for person in people:
+    for person in balance:
         if counter == teams:
             counter = 0
-        team_lists[counter].add_player(person)
-        # Sets the first player of each team as it's respective captain.
-        if len(team_lists[counter].get_players()) == 1:
-            team_lists[counter].name = f"{person.name}"
+        temp_players[counter].append(person)
         counter += 1
 
-    return team_lists
-"""
+    # Now pick a random member as the captain and shuffle the order within teams
+    # Makes each team feel dynamic
+    for group in temp_players:
+        curr_cap = random.choice(group)
+        group.remove(curr_cap)
+        team_dict[curr_cap.get_name()] = Team(curr_cap.get_name(), date_string())
+        team_dict[curr_cap.get_name()].add_player(curr_cap)
+        random.shuffle(group)
+        for player in group:
+            team_dict[curr_cap.get_name()].add_player(player)
+    return team_dict
 
 
 def generate_teams(people: list[Player]) -> dict[str, Team]:
@@ -44,7 +52,7 @@ def generate_teams(people: list[Player]) -> dict[str, Team]:
     Generates a dictionary of random teams from a list of people attending a session.
     Captains will point to the teams.
     :param people: A list of Players
-    :return: A list of Teams
+    :return: A dict of Teams
     """
     teams = len(people) // 6
     team_dict = {}
@@ -98,38 +106,3 @@ def date_string() -> str:
     curr_date = date.today()
     to_format = curr_date.strftime("%A, %B %d")
     return to_format
-
-
-"""
- a = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l']
-    player_list = []
-    num = 1
-    for letter in a:
-        player_list.append(Player(letter, num))
-
-    random.shuffle(player_list)
-
-    teams = [Team('Team 1', ''), Team('Team 2', '')]
-    counter = 0
-
-    for gamer in player_list:
-        if counter == 2:
-            counter = 0
-        teams[counter].add_player(gamer)
-
-        counter += 1
-
-    game_one = Game(teams[0], teams[1], '')
-    game_two = Game(teams[0], teams[1], '')
-    game_three = Game(teams[0], teams[1], '')
-    game_one.play_game('Team 1')
-    game_two.play_game('Team 2')
-    game_three.play_game('Team 1')
-
-    last = teams[0].get_players()
-    check = teams[1].get_players()
-    for oop in last:
-        print((oop.get_wins(), oop.get_name()))
-
-    for ahh in check:
-        print((ahh.get_wins(), ahh.get_name()))"""

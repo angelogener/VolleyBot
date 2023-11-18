@@ -7,10 +7,11 @@ from team import Team
 from player import Player
 from discord.ext import commands
 
-from team_builder import generate_teams
-from load_file import load_data
+from team_builder import generate_teams, generate_balanced, team_string
+from load_file import load_data, save_data
 
 # Global Variables
+FILE_NAME = 'player_data.csv'
 TOKEN = 'MTE2ODczODc0OTYzMTQzMDY3Nw.GTvqq2.xLhbp2tVygrQNol4UojlrrRD-7THpgLYCOZcGc'  # Replace with your bot token
 intents = discord.Intents.all()
 intents.message_content = True
@@ -32,7 +33,7 @@ async def on_ready():
     :return: None
     """
     global all_players
-    all_players = load_data('player_data.csv')
+    all_players = load_data(FILE_NAME)
 
     print(f'{bot.user} is now running!')
 
@@ -62,7 +63,41 @@ async def shuffle(ctx):
         curr_players.append(all_players[num])
 
     teams = generate_teams(curr_players)
-    result = team_builder.team_string(teams)
+    result = team_string(teams)
+    # Simulate typing! Makes bot look busy
+    async with out_channel.typing():
+        await asyncio.sleep(2)
+
+    await out_channel.send(result)
+    return
+
+
+@bot.command()
+async def balance(ctx):
+    global teams
+    # Specifically add Planners as the sole role capable of using this command
+    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
+
+    if role_access not in ctx.author.roles:
+        # Non-planners will get no response
+        return
+
+    if not players:
+        await out_channel.send(f"Please update first!")
+        return
+    # In the case we try to make teams with less than 12 players
+    if len(players) < 12:
+        await out_channel.send(f"You currently have **{len(players)} players.**\n"
+                               f"You will need **{12 - len(players)} more players** to make at least two teams!")
+        return
+
+    # Now create teams...
+    curr_players = []
+    for num in players:
+        curr_players.append(all_players[num])
+
+    teams = generate_balanced(curr_players)
+    result = team_string(teams)
     # Simulate typing! Makes bot look busy
     async with out_channel.typing():
         await asyncio.sleep(2)
@@ -81,11 +116,20 @@ async def creategame(ctx, *, disc_teams: str):
     """
     global curr_game
 
+    # Specifically add Planners as the sole role capable of using this command
+    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
+
+    if role_access not in ctx.author.roles:
+        # Non-planners will get no response
+        return
+
     if not teams:
         await out_channel.send("Please make teams first!")
         return
+
     opponents = disc_teams.lower().split(',')
     gamers = []
+
     # Handles case where there weren't exactly "teams" within the string
     if len(opponents) != 2:
         await out_channel.send("Must input two valid team names!")
@@ -193,7 +237,7 @@ async def clear(ctx, value: int):
         await ctx.send("You don't have the necessary permissions to use this command.")
         return
     assert isinstance(value, int), await out_channel.send(f"Not a valid number!")
-    assert 0 < value < 50, await out_channel.send(f"Can only be between 1 and 50 messages!")
+    assert 0 < value < 51, await out_channel.send(f"Can only be between 1 and 50 messages!")
 
     await ctx.channel.purge(limit=value + 1)  # Limit is set to '20 + 1' to include the command message
     await ctx.send(f'Cleared the last {value} messages.',
@@ -257,9 +301,13 @@ async def winner(ctx, champ: str):
     # Simulate typing! Makes bot look busy // ADDS SUSPENSE MUAHHAAH
     async with out_channel.typing():
         await asyncio.sleep(2)
-    await out_channel.send(f"Congratulations to ***{curr_game.get_winner().get_team_name()}*** for taking the cake!")
+    await out_channel.send(f"Congratulations to ***{curr_game.get_winner().get_team_name().title()}*** for taking the "
+                           f"cake!")
     # Game is done! So we have no more current game!
     curr_game = None
+
+    # Now we update the .csv with the changes
+    save_data(FILE_NAME, all_players)
 
 
 @bot.command()
@@ -278,10 +326,30 @@ async def delete(ctx, to_delete: str):
     del teams[to_delete.lower()]
 
 
-def save_players():
+"""
+@bot.command()
+async def addplayer(ctx, *, input: str):
+"""
+
+
+@bot.command()
+async def show(ctx):
     """
-    In the event that the bot ends, main.py will receive the latest iteration of players, and
-    in turn write and save it to a file.
+    Returns current iteration of all Teams.
+    :param ctx: The Message.
+    :return: None
+    """
+    # Simulate typing! Makes bot look busy
+    async with out_channel.typing():
+        await asyncio.sleep(2)
+
+    await out_channel.send(team_string(teams))
+    return
+
+def save_players() -> dict[Player]:
+    """
+    In the event that a game is played or the bot ends,
+    write and save changes to a file.
     """
     return all_players
 
