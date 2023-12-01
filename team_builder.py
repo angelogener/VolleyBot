@@ -17,7 +17,7 @@ def generate_balanced(people: list[Player]) -> dict[str, Team]:
     :param people: A list of Players
     :return: A dict of Teams
     """
-    teams = len(people) // 6
+    teams = (len(people) // 6) if len(people) // 6 >= 2 else 2  # We get a minimum of 2 teams
     team_dict: dict[str, Team] = {}
     temp_players = []
     counter = 0
@@ -56,7 +56,8 @@ def generate_teams(people: list[Player]) -> dict[str, Team]:
     :param people: A list of Players
     :return: A dict of Teams
     """
-    teams = len(people) // 6
+    teams = (len(people) // 6) if len(people) // 6 >= 2 else 2  # We get a minimum of 2 teams
+
     team_dict = {}
     captains = []
     counter = 0

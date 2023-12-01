@@ -16,11 +16,11 @@ intents = discord.Intents.all()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-all_players: dict[int, Player] = {}  # All users in server
-players: list[int] = []  # Player ID's with their Names for team builder
-teams: dict[str, Team] = {}  # A list of Teams
-curr_game: Game = Game(Team("", ""), Team("", ""))  # Empty Game with Empty Teams that will be updated via update()
-curr_guild: discord.guild = None
+all_players: dict[int, Player]  # All users in server
+players: list[int]  # Player ID's with their Names for team builder
+teams: dict[str, Team]  # A list of Teams
+curr_game: Game  # The current Game
+curr_guild: discord.guild  # The current Guild
 
 
 @bot.event
@@ -38,21 +38,26 @@ async def on_ready():
 @bot.command()
 async def shuffle(ctx):
     global teams
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
+    """
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         return
-
+    """
     if not players:
         await ctx.send(f"Please update first!")
         return
     # In the case we try to make teams with less than 12 players
     if len(players) < 12:
         await ctx.send(f"You currently have **{len(players)} players.**\n"
-                       f"You will need **{12 - len(players)} more players** to make at least two teams!")
-        return
+                       f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
+                       f"_ _")
 
     # Now create teams...
     curr_players = []
@@ -72,11 +77,16 @@ async def shuffle(ctx):
 @bot.command()
 async def balance(ctx):
     """
-    Matchmakes the users that RSVP'd into balanced teams.
+    Matchmake the users that RSVP'd into balanced teams.
     :param ctx: The Message
     :return: None
     """
     global teams
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
+
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
@@ -90,8 +100,8 @@ async def balance(ctx):
     # In the case we try to make teams with less than 12 players
     if len(players) < 12:
         await ctx.send(f"You currently have **{len(players)} players.**\n"
-                       f"You will need **{12 - len(players)} more players** to make at least two teams!")
-        return
+                       f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
+                       f"_ _")
 
     # Now create teams...
     curr_players = []
@@ -117,6 +127,10 @@ async def creategame(ctx, *, disc_teams: str):
     :return: None
     """
     global curr_game
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
 
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
@@ -177,40 +191,47 @@ async def update(ctx):
     global curr_guild, players
     curr_guild = ctx.guild
 
-    # Obtain this server's latest Volleyball event
-    events = await curr_guild.fetch_scheduled_events()
-    curr_event = events[0]
-
-    await ctx.send("Obtained players who RSVP'd! Thank you for doing that!")
-
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"**---------------**\n" + f"**Updating...**\n" + f"_ _")
+    """
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(curr_guild.roles, name="Planners")
-    """
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         await ctx.send("You don't have the necessary permissions to use this command.")
         return
     """
-    try:
+    # Obtain this server's latest Volleyball event
+    events = await curr_guild.fetch_scheduled_events()
 
+    # If no event was created
+    if len(events) == 0:
+        await ctx.send("Please make an event first!")
+        return
+
+    curr_event = events[0]
+    await ctx.send("Obtained players who RSVP'd! Thank you signing up!")
+
+    try:
         reacted = []
+
         # Now goes through each of the users that reacted
         async for user in curr_event.users():
             reacted.append(user.id)
 
-        # We obtain all the users who reacted and fetch nicknames (if they have any)
+        # We obtain all the users who indicated they are coming and fetch nicknames (if they have any)
         # We then try to add them to our list of players
         await ctx.send(f"Updating player roster!")
 
         await update_players(reacted)
         players = reacted
+
         # Simulate typing! Makes bot look busy
         async with ctx.typing():
             await asyncio.sleep(2)
         await ctx.send(f"Ready!")
 
-        for a in players:
-            await ctx.send(f"{all_players[a].get_name()}")
         return
 
     except Exception as e:
@@ -226,14 +247,14 @@ async def clear(ctx, value: int):
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
-    if role_access not in ctx.author.roles:
+    """if role_access not in ctx.author.roles:
         # Non-planners will get no response
         await ctx.send("You don't have the necessary permissions to use this command.")
-        return
+        return"""
     assert isinstance(value, int), await ctx.send(f"Not a valid number!")
     assert 0 < value < 51, await ctx.send(f"Can only be between 1 and 50 messages!")
 
-    await ctx.channel.purge(limit=value + 1)  # Limit is set to '20 + 1' to include the command message
+    await ctx.channel.purge(limit=value + 1)  # Limit is set to "20 + 1" to include the command message
     await ctx.send(f'Cleared the last {value} messages.',
                    delete_after=5)  # Delete the confirmation message after 5 seconds
 
@@ -248,6 +269,10 @@ async def winner(ctx, champ: str):
     :return: None
     """
     global curr_game
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
 
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
@@ -286,21 +311,30 @@ async def deleteteam(ctx, to_delete: str):
     :return: None
     """
     global teams
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
+
     if to_delete.lower() not in teams:
         await ctx.send(f"Please enter a valid team")
         return
-
+    del_team = teams[to_delete.lower()].get_team_name()
     del teams[to_delete.lower()]
+    await ctx.send(f"**Team {del_team.title()}*** has been disbanded. \n"
+                   f"Thanks for playing!")
 
 
 @bot.command()
 async def addplayer(ctx, *, ctx_input: str):
     """
     Adds a player to a given team. Accounts for players that did not RSVP.
-    :param ctx:
-    :param ctx_input:
+    :param ctx: The Message.
+    :param ctx_input: Split into names
     :return:
     """
+
+
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
@@ -311,6 +345,10 @@ async def addplayer(ctx, *, ctx_input: str):
     # Avoid infinite loops by ignoring messages from the bot itself
     if ctx.author == bot.user:
         return
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
 
     if not teams:
         await ctx.send("Please make teams first!")
@@ -353,6 +391,13 @@ async def addplayer(ctx, *, ctx_input: str):
 
 @bot.command()
 async def removeplayer(ctx, *, ctx_input: str):
+    """
+    Removes a player from a given team. Both items must exist and be specified correctly.
+    :param ctx: The Message.
+    :param ctx_input: The string containing the player and team they currently belong to
+    :return:
+    """
+
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
@@ -363,6 +408,10 @@ async def removeplayer(ctx, *, ctx_input: str):
     # Avoid infinite loops by ignoring messages from the bot itself
     if ctx.author == bot.user:
         return
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
 
     if not teams:
         await ctx.send("Please make teams first!")
@@ -410,9 +459,14 @@ async def removeplayer(ctx, *, ctx_input: str):
 async def show(ctx):
     """
     Returns current iteration of all Teams.
+
     :param ctx: The Message.
     :return: None
     """
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
+
     # Simulate typing! Makes bot look busy
     async with ctx.typing():
         await asyncio.sleep(2)
@@ -425,10 +479,15 @@ async def show(ctx):
 async def cost(ctx, hours: int):
     """
     Returns the split cost of all players attending.
+
     :param ctx: The Message.
     :param hours: The number of hours a session is. We assert that hours > 1
     :return: None
     """
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"_ _")
+
     RATE = 60
     people = len(players)
 
