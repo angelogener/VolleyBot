@@ -3,6 +3,7 @@ import discord
 
 from game import Game
 from player import Player
+from team import Team
 from discord.ext import commands
 
 from team_builder import generate_teams, generate_balanced, team_string
@@ -15,12 +16,11 @@ intents = discord.Intents.all()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-all_players = {}  # All users in server
-players = []  # Player ID's with their Names for team builder
-teams = {}  # A list of Teams
-curr_game = None
-curr_guild = None
-in_channel = None
+all_players: dict[int, Player] = {}  # All users in server
+players: list[int] = []  # Player ID's with their Names for team builder
+teams: dict[str, Team] = {}  # A list of Teams
+curr_game: Game = Game(Team("", ""), Team("", ""))  # Empty Game with Empty Teams that will be updated via update()
+curr_guild: discord.guild = None
 
 
 @bot.event
@@ -51,7 +51,7 @@ async def shuffle(ctx):
     # In the case we try to make teams with less than 12 players
     if len(players) < 12:
         await ctx.send(f"You currently have **{len(players)} players.**\n"
-                               f"You will need **{12 - len(players)} more players** to make at least two teams!")
+                       f"You will need **{12 - len(players)} more players** to make at least two teams!")
         return
 
     # Now create teams...
@@ -71,6 +71,11 @@ async def shuffle(ctx):
 
 @bot.command()
 async def balance(ctx):
+    """
+    Matchmakes the users that RSVP'd into balanced teams.
+    :param ctx: The Message
+    :return: None
+    """
     global teams
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
@@ -85,7 +90,7 @@ async def balance(ctx):
     # In the case we try to make teams with less than 12 players
     if len(players) < 12:
         await ctx.send(f"You currently have **{len(players)} players.**\n"
-                               f"You will need **{12 - len(players)} more players** to make at least two teams!")
+                       f"You will need **{12 - len(players)} more players** to make at least two teams!")
         return
 
     # Now create teams...
@@ -154,8 +159,8 @@ async def creategame(ctx, *, disc_teams: str):
     async with ctx.typing():
         await asyncio.sleep(2)
     await ctx.send(f"Prepare for the following matchup: \n"
-                           f"***Team {curr_game.team_one.get_team_name().title()}*** vs "
-                           f"***Team {curr_game.team_two.get_team_name().title()}***")
+                   f"***Team {curr_game.team_one.get_team_name().title()}*** vs "
+                   f"***Team {curr_game.team_two.get_team_name().title()}***")
     return
 
 
@@ -169,52 +174,45 @@ async def update(ctx):
     """
 
     # Obtain the server that the message was sent in
-    global curr_guild, in_channel, players
+    global curr_guild, players
     curr_guild = ctx.guild
 
-    # Obtain this server's instance of Polls and Teams
-    for text in curr_guild.text_channels:
-        if text.name.lower() == "polls":
-            in_channel = curr_guild.get_channel(text.id)
+    # Obtain this server's latest Volleyball event
+    events = await curr_guild.fetch_scheduled_events()
+    curr_event = events[0]
 
     await ctx.send("Obtained players who RSVP'd! Thank you for doing that!")
 
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(curr_guild.roles, name="Planners")
-
+    """
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         await ctx.send("You don't have the necessary permissions to use this command.")
         return
-
+    """
     try:
-        # Instantiate the checkmark emoji
-        checkmark = '\U00002705'  # Unicode for the checkmark emoji
+
         reacted = []
+        # Now goes through each of the users that reacted
+        async for user in curr_event.users():
+            reacted.append(user.id)
 
-        # Parse through the most recent 50 messages
-        async for msg in in_channel.history(limit=5):
+        # We obtain all the users who reacted and fetch nicknames (if they have any)
+        # We then try to add them to our list of players
+        await ctx.send(f"Updating player roster!")
 
-            # Checks if each of the last 50 messages contains the checkmark emoji
-            if checkmark in [reaction.emoji for reaction in msg.reactions]:
+        await update_players(reacted)
+        players = reacted
+        # Simulate typing! Makes bot look busy
+        async with ctx.typing():
+            await asyncio.sleep(2)
+        await ctx.send(f"Ready!")
 
-                # Now goes through each of the users that reacted
-                async for user in msg.reactions[0].users():
-                    reacted.append(user.id)
-                # We obtain all the users who reacted and fetch nicknames (if they have any)
-                # We then try to add them to our list of players
-                await ctx.send(f"Updating player roster!")
+        for a in players:
+            await ctx.send(f"{all_players[a].get_name()}")
+        return
 
-                await update_players(reacted)
-                players = reacted
-                # Simulate typing! Makes bot look busy
-                async with ctx.typing():
-                    await asyncio.sleep(2)
-                await ctx.send(f"Ready!")
-
-                return
-        else:
-            await ctx.send("No recent reactions found with the specified emoji.")
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
 
@@ -222,7 +220,7 @@ async def update(ctx):
 @bot.command()
 async def clear(ctx, value: int):
     """
-    Purges the last 20 messages.
+    Purges the last couple of messages, determined by value.
     """
 
     # Specifically add Planners as the sole role capable of using this command
@@ -244,7 +242,7 @@ async def clear(ctx, value: int):
 async def winner(ctx, champ: str):
     """
     Declares the winning team of the game! Ensures all players from each team
-    gets their ratings updated
+    gets their ratings updated.
     :param ctx: The message.
     :param champ: The string representation of the winning team
     :return: None
@@ -271,7 +269,7 @@ async def winner(ctx, champ: str):
     async with ctx.typing():
         await asyncio.sleep(2)
     await ctx.send(f"Congratulations to ***{curr_game.get_winner().get_team_name().title()}*** for taking the "
-                           f"cake!")
+                   f"cake!")
     # Game is done! So we have no more current game!
     curr_game = None
 
@@ -280,7 +278,7 @@ async def winner(ctx, champ: str):
 
 
 @bot.command()
-async def delete(ctx, to_delete: str):
+async def deleteteam(ctx, to_delete: str):
     """
     Delete the specified team.
     :param ctx: The message
@@ -297,7 +295,12 @@ async def delete(ctx, to_delete: str):
 
 @bot.command()
 async def addplayer(ctx, *, ctx_input: str):
-
+    """
+    Adds a player to a given team. Accounts for players that did not RSVP.
+    :param ctx:
+    :param ctx_input:
+    :return:
+    """
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
@@ -344,13 +347,12 @@ async def addplayer(ctx, *, ctx_input: str):
 
     teams[to_team].add_player(all_players[person.id])
     await ctx.send(f"**{all_players[person.id].get_name().title()}** "
-                           f"has joined **Team {teams[to_team].get_team_name().title()}**!")
+                   f"has joined **Team {teams[to_team].get_team_name().title()}**!")
     return
 
 
 @bot.command()
 async def removeplayer(ctx, *, ctx_input: str):
-
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
@@ -400,7 +402,7 @@ async def removeplayer(ctx, *, ctx_input: str):
 
     teams[to_team].remove_player(all_players[person.id])
     await ctx.send(f"**{all_players[person.id].get_name().title()}** "
-                           f"has left **Team {teams[to_team].get_team_name().title()}**!")
+                   f"has left **Team {teams[to_team].get_team_name().title()}**!")
     return
 
 
@@ -416,6 +418,31 @@ async def show(ctx):
         await asyncio.sleep(2)
 
     await ctx.send(team_string(teams))
+    return
+
+
+@bot.command()
+async def cost(ctx, hours: int):
+    """
+    Returns the split cost of all players attending.
+    :param ctx: The Message.
+    :param hours: The number of hours a session is. We assert that hours > 1
+    :return: None
+    """
+    RATE = 60
+    people = len(players)
+
+    if type(hours) != int or hours < 1:
+        await ctx.send(f"Please enter a valid number to calculate costs!")
+        return
+
+    per_person = round((RATE * hours) / people, 2)
+
+    # Simulate typing! Makes bot look busy
+    async with ctx.typing():
+        await asyncio.sleep(2)
+
+    await ctx.send(f"Th cost for the **{people} players** coming is ${per_person}")
     return
 
 
@@ -454,7 +481,7 @@ async def update_players(ids: list[str]) -> None:
     all_players.update(updated)
 
 
-def save_players() -> dict[Player]:
+def save_players() -> dict[int, Player]:
     """
     In the event that a game is played or the bot ends,
     write and save changes to a file.

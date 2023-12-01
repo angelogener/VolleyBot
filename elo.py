@@ -16,6 +16,12 @@ def calculate_elo(my_rating: int, their_rating: int, games: int, is_winner: bool
     :param is_winner: True if the Player won. False if the Player lost.
     :return: The Player's new rank rating
     """
+
+    """
+    Similar to popular games using the Elo Method, we must use the first 5 games a baseline to 
+    easily determine the skill level of any given player. Hence we weight the first 5 games to 
+    place them in their appropriate Elo ranking quickly.
+    """
     if games > 5:
         k = 50
     else:
@@ -23,6 +29,8 @@ def calculate_elo(my_rating: int, their_rating: int, games: int, is_winner: bool
 
     den = 1 + pow(10, (their_rating - my_rating) / 400)
     estimate = 1 / den
+
+    # Our formula adapts based on the success of the player
     if is_winner:
         new_rating = my_rating + round(k*(1 - estimate))
     else:

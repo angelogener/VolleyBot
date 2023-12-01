@@ -3,7 +3,7 @@ from typing import Any
 from player import Player
 
 
-def load_data(file: str) -> dict[Player] | dict[Any, Any]:
+def load_data(file: str) -> dict[int, Player] | dict[Any, Any]:
     """
     :param file: The string name of the .csv file to be read.
     Instantiates Players and creates a dictionary of them.
@@ -27,7 +27,7 @@ def load_data(file: str) -> dict[Player] | dict[Any, Any]:
         return {}
 
 
-def save_data(file: str, players: dict[Player]):
+def save_data(file: str, players: dict[int, Player]):
     try:
         with open(file, 'w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file)
