@@ -1,6 +1,5 @@
 import random
 from datetime import date
-from typing import Dict, Any
 
 from player import Player
 from team import Team
@@ -90,6 +89,7 @@ def team_string(teams: dict[str, Team]) -> str:
     """
     formatted = f"The following teams on **{date_string()}** are: \n" + "\n"
     for team, players in teams.items():
+
         # We assume that the first person is a team captain, list the number of players (including them) and re-add
         temp_string = f"***Team {team.title()}***" + f": **({len(players.get_players())} Players)** \n"
         for player in players.get_players():

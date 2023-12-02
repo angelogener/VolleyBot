@@ -37,6 +37,11 @@ async def on_ready():
 
 @bot.command()
 async def shuffle(ctx):
+    """
+    Shuffle users that RSVP'd into teams.
+    :param ctx: The Message
+    :return: None
+    """
     global teams
 
     # Delete the command message
@@ -53,10 +58,12 @@ async def shuffle(ctx):
     if not players:
         await ctx.send(f"Please update first!")
         return
+
+    await ctx.send(f"You currently have **{len(players)} players.**")  # Output the number of players
+
     # In the case we try to make teams with less than 12 players
     if len(players) < 12:
-        await ctx.send(f"You currently have **{len(players)} players.**\n"
-                       f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
+        await ctx.send(f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
                        f"_ _")
 
     # Now create teams...
@@ -97,12 +104,13 @@ async def balance(ctx):
     if not players:
         await ctx.send(f"Please update first!")
         return
+
+    await ctx.send(f"You currently have **{len(players)} players.**")  # Output the number of players
+
     # In the case we try to make teams with less than 12 players
     if len(players) < 12:
-        await ctx.send(f"You currently have **{len(players)} players.**\n"
-                       f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
+        await ctx.send(f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
                        f"_ _")
-
     # Now create teams...
     curr_players = []
     for num in players:
@@ -237,6 +245,45 @@ async def update(ctx):
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
 
+
+@bot.command()
+async def rsvp(ctx, *members: commands.MemberConverter):
+    """
+    For players who did not RSVP but arrived, add them to the list of players.
+    :param ctx: The Message.
+    :param members: An unspecified number of users to add.
+    :return:
+    """
+
+    # Obtain the server that the message was sent in
+    global curr_guild, players
+    curr_guild = ctx.guild
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"**---------------**\n" + f"**Updating...**\n" + f"_ _")
+
+    late = []
+    try:
+        # Now goes through each of the users that reacted
+        late = [member.id for member in members]
+
+        # We obtain all the users who indicated they are coming and fetch nicknames (if they have any)
+        # We then try to add them to our list of players
+        await ctx.send(f"Adding players!")
+        await update_players(late)
+
+        temp_list = set(late) - set(players)  # Obtain unique players
+        players.extend(temp_list)
+
+        # Simulate typing! Makes bot look busy
+        async with ctx.typing():
+            await asyncio.sleep(2)
+        await ctx.send(f"Ready!")
+        return
+
+    except Exception as e:
+        await ctx.send(f"An error occurred: {str(e)}")
 
 @bot.command()
 async def clear(ctx, value: int):

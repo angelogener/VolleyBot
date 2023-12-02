@@ -19,13 +19,10 @@ def calculate_elo(my_rating: int, their_rating: int, games: int, is_winner: bool
 
     """
     Similar to popular games using the Elo Method, we must use the first 5 games a baseline to 
-    easily determine the skill level of any given player. Hence we weight the first 5 games to 
+    easily determine the skill level of any given player. Hence we weight the first 5 games more to 
     place them in their appropriate Elo ranking quickly.
     """
-    if games > 5:
-        k = 50
-    else:
-        k = 100
+    k = 50 if games > 50 else 100
 
     den = 1 + pow(10, (their_rating - my_rating) / 400)
     estimate = 1 / den
