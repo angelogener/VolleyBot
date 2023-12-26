@@ -1,4 +1,4 @@
-from player import Player
+from constructors.player import Player
 
 
 class Team:

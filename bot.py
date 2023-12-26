@@ -1,13 +1,13 @@
 import asyncio
 import discord
 
-from game import Game
-from player import Player
-from team import Team
+from constructors.game import Game
+from constructors.player import Player
+from constructors.team import Team
 from discord.ext import commands
 
-from team_builder import generate_teams, generate_balanced, team_string
-from load_file import load_data, save_data
+from constructors.team_builder import generate_teams, generate_balanced, team_string
+from saves.load_file import load_data, save_data
 
 # Global Variables
 FILE_NAME = 'player_data.csv'

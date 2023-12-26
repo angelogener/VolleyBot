@@ -1,6 +1,6 @@
 import csv
 from typing import Any
-from player import Player
+from constructors.player import Player
 
 
 def load_data(file: str) -> dict[int, Player] | dict[Any, Any]:

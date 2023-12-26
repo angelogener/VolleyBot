@@ -1,8 +1,8 @@
 import random
 from datetime import date
 
-from player import Player
-from team import Team
+from constructors.player import Player
+from constructors.team import Team
 
 
 def generate_balanced(people: list[Player]) -> dict[str, Team]:

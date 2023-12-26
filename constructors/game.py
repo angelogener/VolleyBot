@@ -1,4 +1,4 @@
-from team import Team
+from constructors.team import Team
 
 
 class Game:
