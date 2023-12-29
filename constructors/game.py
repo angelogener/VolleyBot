@@ -8,7 +8,6 @@ class Game:
     Attributes:
         team_one(Team): The first team in the game.
         team_two(Team): The other team in the game.
-        date(str): Date the game took place on.
         first_winner(bool): True if the team_one won. False if team_two won.
     """
 
@@ -17,13 +16,13 @@ class Game:
         self.team_two = team_two
         self.first_winner = None
 
-    def play_game(self, name: str):
-        if name == self.team_one.get_team_name():
+    def play_game(self, winner: int):
+        if winner == self.team_one.get_team_number():
             self.first_winner = True
             self.team_one.play_team(True, self.team_two.average_rating())
             self.team_two.play_team(False, self.team_one.average_rating())
 
-        elif name == self.team_two.get_team_name():
+        elif winner == self.team_two.get_team_number():
             self.first_winner = False
             self.team_one.play_team(False, self.team_two.average_rating())
             self.team_two.play_team(True, self.team_one.average_rating())
@@ -42,8 +41,5 @@ class Game:
     def get_teams(self) -> tuple[Team, Team]:
         return self.team_one, self.team_two
 
-    def get_team_names(self) -> tuple[str, str]:
-        return self.team_one.get_team_name(), self.team_two.get_team_name()
-
-    def get_date(self) -> str:
-        return self.date
+    def get_team_numbers(self) -> tuple[int, int]:
+        return self.team_one.get_team_number(), self.team_two.get_team_number()

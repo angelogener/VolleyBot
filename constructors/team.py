@@ -1,3 +1,4 @@
+import random
 from constructors.player import Player
 
 
@@ -6,13 +7,12 @@ class Team:
     A full Volleyball Team composed of Players.
 
     Attributes:
-        name (str): The name of the Team.
+        number (int): The designated Team Number.
         players (list[Player]): The list containing the Players in the team.
         record (int): The number of wins accumulated by this team.
     """
-    def __init__(self, name: str, date: str):
-        self.name = name
-        self.date = date
+    def __init__(self, number: int):
+        self.number = number
         self.players = []
         self.record = 0
 
@@ -44,6 +44,14 @@ class Team:
         for player in self.players:
             player.play(is_winner, opponent)
 
+    def rearrange(self):
+        """
+        Shuffles the order of the team.
+        :return: None.
+        """
+        if len(self.players) > 1:
+            random.shuffle(self.players)
+
     def get_players(self) -> list[Player]:
         """
         Returns a list of the players in the team.
@@ -51,12 +59,12 @@ class Team:
         """
         return self.players
 
-    def get_team_name(self) -> str:
+    def get_team_number(self) -> int:
         """
         Returns a name of the team.
         :return: The team name
         """
-        return self.name
+        return self.number
 
     def get_record(self) -> int:
         """

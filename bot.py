@@ -18,7 +18,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 all_players: dict[int, Player]  # All users in server
 players: list[int]  # Player ID's with their Names for team builder
-teams: dict[str, Team]  # A list of Teams
+teams: dict[int, Team]  # A list of Teams
 curr_game: Game  # The current Game
 curr_guild: discord.guild  # The current Guild
 
@@ -47,14 +47,14 @@ async def shuffle(ctx):
     # Delete the command message
     await ctx.message.delete()
     await ctx.send(f"_ _")
-    """
+
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
 
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         return
-    """
+
     if not players:
         await ctx.send(f"Please update first!")
         return
@@ -154,35 +154,44 @@ async def creategame(ctx, *, disc_teams: str):
     opponents = disc_teams.lower().split(',')
     gamers = []
 
-    # Handles case where there weren't exactly "teams" within the string
-    if len(opponents) != 2:
-        await ctx.send("Must input two valid team names!")
+    # Cast 'int' to numbered string
+    try:
+        opponents = [int(num) for num in opponents]
+    except ValueError:
+        await ctx.send(f"Must input the team numbers!")
         return
+
+    # Handles case where there weren't exactly 2 teams within the message
+    if len(opponents) != 2:
+        await ctx.send("Must input two teams!")
+        return
+
     # Off case where both strings identical. Weird right?
     if opponents[0] == opponents[1]:
         await ctx.send("Can't have the team play itself! What?")
         return
 
     # Get the two Teams for the brawl! Checks if both teams exist in the current team dictionary
-    if opponents[0].strip() in teams:
-        gamers.append(teams[opponents[0].strip()])
+    if opponents[0] in teams:
+        gamers.append(teams[opponents[0]])
     else:
         await ctx.send("Game could not be played. Please add two valid teams.")
         return
 
-    if opponents[1].strip() in teams:
-        gamers.append(teams[opponents[1].strip()])
+    if opponents[1] in teams:
+        gamers.append(teams[opponents[1]])
     else:
         await ctx.send("Game could not be played. Please add two valid teams.")
         return
 
     curr_game = Game(gamers[0], gamers[1])
+    
     # Simulate typing! Makes bot look busy
     async with ctx.typing():
         await asyncio.sleep(2)
     await ctx.send(f"Prepare for the following matchup: \n"
-                   f"***Team {curr_game.team_one.get_team_name().title()}*** vs "
-                   f"***Team {curr_game.team_two.get_team_name().title()}***")
+                   f"***Team {curr_game.team_one.get_team_number()}*** vs "
+                   f"***Team {curr_game.team_two.get_team_number()}***")
     return
 
 
@@ -285,6 +294,7 @@ async def rsvp(ctx, *members: commands.MemberConverter):
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
 
+
 @bot.command()
 async def clear(ctx, value: int):
     """
@@ -332,15 +342,22 @@ async def winner(ctx, champ: str):
         await ctx.send("Please make a game first!")
         return
 
-    if champ.lower() not in curr_game.get_team_names():
+    # Cast 'int' to numbered string
+    try:
+        team_num = int(champ)
+    except ValueError:
+        await ctx.send(f"Input the winning team's number!")
+        return
+
+    if champ not in curr_game.get_team_numbers():
         await ctx.send(f"Please enter a valid winner!")
         return
 
-    curr_game.play_game(champ.lower())
+    curr_game.play_game(team_num)
     # Simulate typing! Makes bot look busy // ADDS SUSPENSE MUAHHAAH
     async with ctx.typing():
         await asyncio.sleep(2)
-    await ctx.send(f"Congratulations to ***{curr_game.get_winner().get_team_name().title()}*** for taking the "
+    await ctx.send(f"Congratulations to ***Team {curr_game.get_winner().get_team_number()}*** for taking the "
                    f"cake!")
     # Game is done! So we have no more current game!
     curr_game = None
@@ -361,15 +378,23 @@ async def deleteteam(ctx, to_delete: str):
 
     # Delete the command message
     await ctx.message.delete()
+
+    # Cast 'int' to numbered string
+    try:
+        team_num = int(to_delete)
+    except ValueError:
+        await ctx.send(f"Input the number of the team to delete!")
+        return
+
     await ctx.send(f"_ _")
 
-    if to_delete.lower() not in teams:
+    if team_num not in teams:
         await ctx.send(f"Please enter a valid team")
         return
-    del_team = teams[to_delete.lower()].get_team_name()
-    del teams[to_delete.lower()]
-    await ctx.send(f"**Team {del_team.title()}*** has been disbanded. \n"
+    del teams[team_num]
+    await ctx.send(f"**Team {team_num}*** has been disbanded. \n"
                    f"Thanks for playing!")
+    return
 
 
 @bot.command()
@@ -380,7 +405,6 @@ async def addplayer(ctx, *, ctx_input: str):
     :param ctx_input: Split into names
     :return:
     """
-
 
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
