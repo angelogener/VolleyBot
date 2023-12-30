@@ -78,6 +78,7 @@ def team_string(teams: dict[int, Team]) -> str:
         # List the team and its players
         temp_string = f"***Team {str(team)}***" + f": **({len(players.get_players())} Players)** \n"
         temp_string += f"***---------------***\n"
+        formatted += temp_string
 
         for player in players.get_players():
             temp_string = f" - {player.get_name().title()}\n"

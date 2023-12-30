@@ -15,7 +15,7 @@ def load_data(file: str) -> dict[int, Player] | dict[Any, Any]:
             csv_reader = csv.reader(csv_file)
             next(csv_reader, None)
             for row in csv_reader:
-                player_num = int(row[0])
+                player_num = int(float(row[0]))
                 player_name = row[1]
                 player_ranking = int(row[2]) if row[2] else 0
                 player_wins = int(row[3]) if row[3] else 0

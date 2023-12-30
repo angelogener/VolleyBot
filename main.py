@@ -1,4 +1,7 @@
 # Boots up bot!
+import bot
+import atexit
+import pandas as pd
 from constructors.game import Game
 from constructors.player import Player
 from constructors.team import Team
@@ -6,11 +9,11 @@ from constructors.team_builder import generate_teams, generate_balanced, team_st
 from saves.load_file import load_data, save_data
 
 if __name__ == '__main__':
-    """
+
     bot.run_bot()
     atexit.register(lambda: save_data('player_data.csv', bot.save_players()))
-    
-    """
+
+
     """
     all_players = load_data('player_data.csv')
     attended = (('Joaquin', 1), ('Angelo', 1), ('Simon2Coo', 1), ('Ashpan', 1),
