@@ -16,7 +16,7 @@ intents = discord.Intents.all()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-all_players: dict[int, Player]  # All users in server
+all_players: dict[int, Player]  # All past and current attendees to volleyball
 players: list[int]  # Player ID's with their Names for team builder
 teams: dict[int, Team]  # A list of Teams
 curr_game: Game  # The current Game
@@ -198,8 +198,9 @@ async def creategame(ctx, *, disc_teams: str):
 @bot.command()
 async def update(ctx):
     """
-    Get the players that have last RSVP'd to the latest session and update the current
-    list of players.
+    Updates the current list of players. Checks all users in the server
+    and ensures that saved Player ID's and Player Names are up-to-date.
+    We then check list of players attending the most recent event and prepare to create teams.
     :param ctx: The Message
     :return: None
     """
@@ -210,15 +211,19 @@ async def update(ctx):
 
     # Delete the command message
     await ctx.message.delete()
-    await ctx.send(f"**---------------**\n" + f"**Updating...**\n" + f"_ _")
-    """
+    await ctx.send(f"**---------------**\n" + f"**Updating, this might take a while...**\n" + f"_ _")
+
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(curr_guild.roles, name="Planners")
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         await ctx.send("You don't have the necessary permissions to use this command.")
         return
-    """
+
+    users = {}
+    async for person in curr_guild.fetch_members():
+        users[person.display_name]: person.id
+
     # Obtain this server's latest Volleyball event
     events = await curr_guild.fetch_scheduled_events()
 
@@ -272,7 +277,6 @@ async def rsvp(ctx, *members: commands.MemberConverter):
     await ctx.message.delete()
     await ctx.send(f"**---------------**\n" + f"**Updating...**\n" + f"_ _")
 
-    late = []
     try:
         # Now goes through each of the users that reacted
         late = [member.id for member in members]
