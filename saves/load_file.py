@@ -28,6 +28,12 @@ def load_data(file: str) -> dict[int, Player] | dict[Any, Any]:
 
 
 def save_data(file: str, players: dict[int, Player]):
+    """
+    Writes the Player Data into the designated .csv file for saving.
+    :param file: Name of the file to save data to
+    :param players: The dictionary containing Player Data
+    :return:
+    """
     try:
         with open(file, 'w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file)

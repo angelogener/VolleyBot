@@ -9,11 +9,11 @@ from constructors.team_builder import generate_teams, generate_balanced, team_st
 from saves.load_file import load_data, save_data
 
 if __name__ == '__main__':
-    """
+
     # Runs the Bot
     bot.run_bot()
     atexit.register(lambda: save_data('player_data.csv', bot.save_players()))
-    """
+    
 
     """
     # This code is to fix incorrect/duplicated Player ID's
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     save_data('player_data.csv', new_players)
     """
-
+    """
     # Manually creates games between players.
     all_players = load_data('player_data.csv')
 
@@ -103,4 +103,4 @@ if __name__ == '__main__':
 
     save_data('player_data.csv', all_players)
 
-    """"""
+    """

@@ -72,16 +72,15 @@ def team_string(teams: dict[int, Team]) -> str:
     :param teams: A dictionary containing the arrangement of Teams
     :return: A formatted string to be read, with Teams, Players and the Session Date.
     """
-    formatted = f"The following teams on **{date_string()}** are: \n" + "\n"
+    formatted = f"# The following teams on **{date_string()}** are: \n" + "\n"
     for team, players in teams.items():
 
         # List the team and its players
-        temp_string = f"***Team {str(team)}***" + f": **({len(players.get_players())} Players)** \n"
-        temp_string += f"***---------------***\n"
+        temp_string = f"## ***Team {str(team)}***" + f": **({len(players.get_players())} Players)** \n"
         formatted += temp_string
 
         for player in players.get_players():
-            temp_string = f" - {player.get_name().title()}\n"
+            temp_string = f"- {player.get_name().title()}\n"
             formatted += temp_string
 
             # If we are past the first team, add a new line character
