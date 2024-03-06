@@ -5,7 +5,7 @@ from constructors.player import Player
 from constructors.team import Team
 
 
-def generate_balanced(people: list[Player]) -> dict[int, Team]:
+def generate_balanced(people: list[Player], num_teams: int = 2) -> dict[int, Team]:
     """
     Generates a dictionary of balanced teams from a list of people attending a session.
     Accounts for elo when making the teams. Higher rated players are split amongst each other
@@ -13,9 +13,10 @@ def generate_balanced(people: list[Player]) -> dict[int, Team]:
     We will aim to shuffle the order of Players so that skill distribution is not exposed
     when teams are made.
     :param people: A list of Players
+    :param num_teams: An optional parameter for the max number of teams.
     :return: A dict of Teams
     """
-    teams = (len(people) // 6) if len(people) // 6 >= 2 else 2  # We get a minimum of 2 teams
+    teams = max(num_teams, 2)  # We get a minimum of 2 teams
     team_dict: dict[int, Team] = {}
     counter = 0
     balance = sorted(people, key=lambda x: x.rating, reverse=True)  # Sorts players based on rating
@@ -37,15 +38,16 @@ def generate_balanced(people: list[Player]) -> dict[int, Team]:
     return team_dict
 
 
-def generate_teams(people: list[Player]) -> dict[int, Team]:
+def generate_teams(people: list[Player], num_teams: int = 2) -> dict[int, Team]:
     """
     Generates a dictionary of random teams from a list of people attending a session.
     Teams each have at least 6 players and are numbered starting from 1.
     :param people: A list of Players
+    :param num_teams: An optional parameter for the max number of teams.
     :return: A dict of Teams
     """
     # Initialize variables
-    teams = (len(people) // 6) if len(people) // 6 >= 2 else 2  # We get a minimum of 2 teams
+    teams = max(num_teams, 2)  # We get a minimum of 2 teams
     team_dict: dict[int, Team] = {}
     counter = 0
 

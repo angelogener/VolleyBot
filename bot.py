@@ -36,10 +36,11 @@ async def on_ready():
 
 
 @bot.command()
-async def shuffle(ctx):
+async def shuffle(ctx, num_teams: int = 0):
     """
     Shuffle users that RSVP'd into teams.
-    :param ctx: The Message
+    :param ctx: The Message.
+    :param num_teams: An optional parameter for the max number of teams.
     :return: None
     """
     global teams
@@ -71,7 +72,13 @@ async def shuffle(ctx):
     for num in players:
         curr_players.append(all_players[num])
 
-    teams = generate_teams(curr_players)
+    # Compute number of teams
+    if num_teams <= 0:
+        num_teams = max(len(players)//6, 2)
+    elif num_teams == 1:
+        await ctx.send(f"You cannot have **{len(players)} players on one team.**")
+
+    teams = generate_teams(curr_players, num_teams)
     result = team_string(teams)
     # Simulate typing! Makes bot look busy
     async with ctx.typing():
@@ -82,7 +89,7 @@ async def shuffle(ctx):
 
 
 @bot.command()
-async def balance(ctx):
+async def balance(ctx, num_teams: int = 0):
     """
     Matchmake the users that RSVP'd into balanced teams.
     :param ctx: The Message
@@ -116,7 +123,13 @@ async def balance(ctx):
     for num in players:
         curr_players.append(all_players[num])
 
-    teams = generate_balanced(curr_players)
+    # Compute number of teams
+    if num_teams <= 0:
+        num_teams = max(len(players)//6, 2)
+    elif num_teams == 1:
+        await ctx.send(f"You cannot have **{len(players)} players on one team.**")
+
+    teams = generate_balanced(curr_players, num_teams)
     result = team_string(teams)
     # Simulate typing! Makes bot look busy
     async with ctx.typing():
@@ -597,7 +610,7 @@ async def update_players(ids: list[str]) -> None:
     global all_players
     updated = {}
     for reacted in ids:
-        member = await curr_guild.fetch_member(reacted)
+        member = await curr_guild.fetch_member(int(reacted))
 
         # 1: The player has been saved but has changed their display name
         if member.id in all_players and member.display_name != all_players[member.id].name:
