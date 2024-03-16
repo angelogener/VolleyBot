@@ -6,7 +6,7 @@ from constructors.player import Player
 from constructors.team import Team
 from discord.ext import commands
 
-from constructors.team_builder import generate_teams, generate_balanced, team_string
+from constructors.team_builder import generate_teams, generate_balanced, team_string, date_string
 from saves.load_file import load_data, save_data
 
 # Global Variables
@@ -80,9 +80,6 @@ async def shuffle(ctx, num_teams: int = 0):
 
     teams = generate_teams(curr_players, num_teams)
     result = team_string(teams)
-    # Simulate typing! Makes bot look busy
-    async with ctx.typing():
-        await asyncio.sleep(2)
 
     await ctx.send(result)
     return
@@ -93,6 +90,7 @@ async def balance(ctx, num_teams: int = 0):
     """
     Matchmake the users that RSVP'd into balanced teams.
     :param ctx: The Message
+    :param num_teams: An optional parameter for the max number of teams.
     :return: None
     """
     global teams
@@ -131,15 +129,12 @@ async def balance(ctx, num_teams: int = 0):
 
     teams = generate_balanced(curr_players, num_teams)
     result = team_string(teams)
-    # Simulate typing! Makes bot look busy
-    async with ctx.typing():
-        await asyncio.sleep(2)
 
     await ctx.send(result)
     return
 
 
-@bot.command()
+@bot.command(name='game')
 async def creategame(ctx, *, disc_teams: str):
     """
     Creates a Game object from the Two teams.
@@ -198,10 +193,7 @@ async def creategame(ctx, *, disc_teams: str):
         return
 
     curr_game = Game(gamers[0], gamers[1])
-    
-    # Simulate typing! Makes bot look busy
-    async with ctx.typing():
-        await asyncio.sleep(2)
+
     await ctx.send(f"Prepare for the following matchup: \n"
                    f"***Team {curr_game.team_one.get_team_number()}*** vs "
                    f"***Team {curr_game.team_two.get_team_number()}***")
@@ -224,7 +216,7 @@ async def update(ctx):
 
     # Delete the command message
     await ctx.message.delete()
-    await ctx.send(f"**---------------**\n" + f"**Updating, this might take a while...**\n" + f"_ _")
+    await ctx.send(f"**Updating, this might take a while...**\n")
 
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(curr_guild.roles, name="Planners")
@@ -262,10 +254,48 @@ async def update(ctx):
         await update_players(reacted)
         players = reacted
 
-        # Simulate typing! Makes bot look busy
-        async with ctx.typing():
-            await asyncio.sleep(2)
         await ctx.send(f"Ready!")
+
+        return
+
+    except Exception as e:
+        await ctx.send(f"An error occurred: {str(e)}")
+
+
+@bot.command()
+async def audit(ctx):
+    """
+    Check list of players attending the most recent event and audit RSVP's.
+    :param ctx: The Message
+    :return: None
+    """
+
+    # Obtain the server that the message was sent in
+    global curr_guild, players
+    curr_guild = ctx.guild
+
+    # Delete the command message
+    await ctx.message.delete()
+    await ctx.send(f"**Player List as of {date_string()}**\n")
+
+    # Specifically add Planners as the sole role capable of using this command
+    role_access = discord.utils.get(curr_guild.roles, name="Planners")
+    if role_access not in ctx.author.roles:
+        # Non-planners will get no response
+        await ctx.send("You don't have the necessary permissions to use this command.")
+        return
+    try:
+        curr_players = {}
+        i = 1
+        for oop in players:
+            curr_players[i] = all_players[oop].get_name().capitalize()
+            i += 1
+
+        final_str = ''
+        for react in curr_players:
+            final_str += f'{react}) {curr_players[react]} \n'
+
+        await ctx.send(f"{final_str}")
 
         return
 
@@ -302,9 +332,6 @@ async def rsvp(ctx, *members: commands.MemberConverter):
         temp_list = set(late) - set(players)  # Obtain unique players
         players.extend(temp_list)
 
-        # Simulate typing! Makes bot look busy
-        async with ctx.typing():
-            await asyncio.sleep(2)
         await ctx.send(f"Ready!")
         return
 
@@ -333,7 +360,7 @@ async def clear(ctx, value: int):
                    delete_after=5)  # Delete the confirmation message after 5 seconds
 
 
-@bot.command()
+@bot.command(name='win')
 async def winner(ctx, champ: str):
     """
     Declares the winning team of the game! Ensures all players from each team
@@ -371,9 +398,7 @@ async def winner(ctx, champ: str):
         return
 
     curr_game.play_game(team_num)
-    # Simulate typing! Makes bot look busy // ADDS SUSPENSE MUAHHAAH
-    async with ctx.typing():
-        await asyncio.sleep(2)
+
     await ctx.send(f"Congratulations to ***Team {curr_game.get_winner().get_team_number()}*** for taking the "
                    f"cake!")
     # Game is done! So we have no more current game!
@@ -555,10 +580,6 @@ async def show(ctx):
     await ctx.message.delete()
     await ctx.send(f"_ _")
 
-    # Simulate typing! Makes bot look busy
-    async with ctx.typing():
-        await asyncio.sleep(2)
-
     await ctx.send(team_string(teams))
     return
 
@@ -584,10 +605,6 @@ async def cost(ctx, hours: int):
         return
 
     per_person = round((RATE * hours) / people, 2)
-
-    # Simulate typing! Makes bot look busy
-    async with ctx.typing():
-        await asyncio.sleep(2)
 
     await ctx.send(f"Th cost for the **{people} players** coming is ${per_person}")
     return
