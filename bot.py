@@ -1,5 +1,7 @@
 import asyncio
+import datetime
 import discord
+import os
 
 from constructors.game import Game
 from constructors.player import Player
@@ -230,9 +232,8 @@ async def update(ctx):
         users[person.display_name]: person.id
 
     # Obtain this server's latest Volleyball event
-    events = await curr_guild.fetch_scheduled_events()
-
-    # If no event was created
+    events = curr_guild.scheduled_events
+    print(f"[{get_current_time()}] Got events: {events}")
     if len(events) == 0:
         await ctx.send("Please make an event first!")
         return
@@ -392,8 +393,7 @@ async def winner(ctx, champ: str):
     except ValueError:
         await ctx.send(f"Input the winning team's number!")
         return
-
-    if champ not in curr_game.get_team_numbers():
+    if int(champ) not in curr_game.get_team_numbers():
         await ctx.send(f"Please enter a valid winner!")
         return
 
@@ -661,6 +661,10 @@ def clean(username: str) -> bool:
     """
     return isinstance(username, str) and all(ord(char) < 128 for char in username)
 
+
+def get_current_time() -> str:
+    today = datetime.datetime.now()
+    return today.strftime("%H:%M:%S")
 
 def run_bot():
     bot.run(TOKEN)
