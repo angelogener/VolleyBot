@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import discord
 import os
+from dotenv import load_dotenv
 
 from constructors.game import Game
 from constructors.player import Player
@@ -11,9 +12,11 @@ from discord.ext import commands
 from constructors.team_builder import generate_teams, generate_balanced, team_string, date_string
 from saves.load_file import load_data, save_data
 
+load_dotenv()
+
 # Global Variables
 FILE_NAME = 'player_data.csv'
-TOKEN = 'MTE2ODczODc0OTYzMTQzMDY3Nw.GTvqq2.xLhbp2tVygrQNol4UojlrrRD-7THpgLYCOZcGc'  # Replace with your bot token
+TOKEN = os.environ.get('DISCORD_TOKEN')
 intents = discord.Intents.all()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -32,7 +35,8 @@ async def on_ready():
     :return: None
     """
     global all_players
-    all_players = load_data(FILE_NAME)
+    all_players = load_data()
+
 
     print(f'{bot.user} is now running!')
 
@@ -49,7 +53,6 @@ async def shuffle(ctx, num_teams: int = 0):
 
     # Delete the command message
     await ctx.message.delete()
-    await ctx.send(f"_ _")
 
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
@@ -57,7 +60,6 @@ async def shuffle(ctx, num_teams: int = 0):
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         return
-
     if not players:
         await ctx.send(f"Please update first!")
         return
@@ -156,7 +158,6 @@ async def creategame(ctx, *, disc_teams: str):
     if role_access not in ctx.author.roles:
         # Non-planners will get no response
         return
-
     if not teams:
         await ctx.send("Please make teams first!")
         return
@@ -218,8 +219,8 @@ async def update(ctx):
 
     # Delete the command message
     await ctx.message.delete()
-    await ctx.send(f"**Updating, this might take a while...**\n")
-
+    message = await ctx.send(f"**Updating, this might take a while...**\n")
+    print(f"[{get_current_time()}] Starting now")
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(curr_guild.roles, name="Planners")
     if role_access not in ctx.author.roles:
@@ -230,6 +231,7 @@ async def update(ctx):
     users = {}
     async for person in curr_guild.fetch_members():
         users[person.display_name]: person.id
+    print(f"[{get_current_time()}] Got players")
 
     # Obtain this server's latest Volleyball event
     events = curr_guild.scheduled_events
@@ -239,7 +241,7 @@ async def update(ctx):
         return
 
     curr_event = events[0]
-    await ctx.send("Obtained players who RSVP'd! Thank you signing up!")
+    message = await message.edit(content="Obtained players who RSVP'd! Thank you signing up!")
 
     try:
         reacted = []
@@ -250,12 +252,11 @@ async def update(ctx):
 
         # We obtain all the users who indicated they are coming and fetch nicknames (if they have any)
         # We then try to add them to our list of players
-        await ctx.send(f"Updating player roster!")
 
         await update_players(reacted)
         players = reacted
 
-        await ctx.send(f"Ready!")
+        await message.edit(content="Updated player roster!")
 
         return
 
@@ -374,7 +375,6 @@ async def winner(ctx, champ: str):
 
     # Delete the command message
     await ctx.message.delete()
-    await ctx.send(f"_ _")
 
     # Specifically add Planners as the sole role capable of using this command
     role_access = discord.utils.get(ctx.guild.roles, name="Planners")
@@ -405,7 +405,7 @@ async def winner(ctx, champ: str):
     curr_game = None
 
     # Now we update the .csv with the changes
-    save_data(FILE_NAME, all_players)
+    save_data(all_players)
 
 
 @bot.command()
