@@ -13,7 +13,7 @@ if __name__ == '__main__':
     # Runs the Bot
     bot.run_bot()
     atexit.register(lambda: save_data('player_data.csv', bot.save_players()))
-    
+
 
     """
     # This code is to fix incorrect/duplicated Player ID's

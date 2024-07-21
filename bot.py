@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from constructors.team_builder import generate_teams, generate_balanced, team_string, date_string
 from saves.load_file import load_data, save_data
+from event.rsvp import add_rsvp, remove_rsvp, insert_event, delete_event
 
 load_dotenv()
 
@@ -40,6 +41,50 @@ async def on_ready():
 
     print(f'{bot.user} is now running!')
 
+
+@bot.command(name="event")
+async def create_event(ctx, event_date, event_location, max_players):
+    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
+    if role_access not in ctx.author.roles:
+        print("User does not have permission to create an event")
+        return
+    event_embed = discord.Embed(
+                    title="Volleyball Session", color=0x00ff00
+                ).add_field(
+                    name="Date",
+                    value=event_date,
+                    inline=False
+                ).add_field(
+                    name="Location",
+                    value=event_location,
+                    inline=False
+                ).add_field(
+                    name="Max Players",
+                    value=max_players,
+                    inline=False
+                ).set_footer(
+                    text="React with a ✅ to RSVP. If you can no longer make it react with a ❌ to give up your spot to someone else!")
+    event_message = await ctx.send("@everyone", embed=event_embed)
+    rsvp_message = await ctx.send("RSVP: \n\nWaitlist:")
+    await insert_event(event_message.id, rsvp_message.id, event_date, event_location, max_players)
+    await event_message.add_reaction("✅")
+    await event_message.add_reaction("❌")
+    await ctx.message.delete()
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    channel = bot.get_channel(payload.channel_id)
+    message = await channel.fetch_message(payload.message_id)
+    if payload.member == bot.user:
+        return
+    if payload.emoji.name == "✅":
+        await add_rsvp(bot, payload)
+        await message.remove_reaction("✅", payload.member)
+    elif payload.emoji.name == "❌":
+        await remove_rsvp(bot, payload)
+        await message.remove_reaction("❌", payload.member)
+    elif payload.emoji.name == "🗑️":
+        await delete_event(bot, payload)
 
 @bot.command()
 async def shuffle(ctx, num_teams: int = 0):
