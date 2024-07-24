@@ -1,13 +1,8 @@
 import discord
-from supabase import create_client, Client
-from dotenv import load_dotenv
-import os
+import time
+from db.supabase import get_supabase_client
 
-load_dotenv()
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = get_supabase_client()
 
 async def insert_event(id, rsvp_id, event_date, event_location, max_players):
     supabase.table('event_data').insert({
@@ -15,10 +10,36 @@ async def insert_event(id, rsvp_id, event_date, event_location, max_players):
         'rsvp_id': rsvp_id,
         'event_date': event_date,
         'event_location': event_location,
-        'max_players': max_players
+        'max_players': max_players,
+        'created_time': int(time.time()),
     }).execute()
 
-async def add_rsvp(bot, payload):
+async def add_rsvp_db(message, payload):
+    supabase_client = get_supabase_client()
+    session = supabase_client.table('sessions').select('*').eq('rsvp_message_id', message.id).execute().data[0]
+
+    if not session:
+        return
+
+    # Get the current highest order position for this session
+    max_order = supabase_client.table('rsvps').select('order_position').eq('session_id', session['id']).order('order_position', desc=True).limit(1).execute().data
+    new_order = 1 if not max_order else max_order[0]['order_position'] + 1
+
+    current_rsvps = supabase_client.table('rsvps').select('*').eq('session_id', session['id']).eq('status', 'confirmed').execute()
+
+    if len(current_rsvps.data) < session['max_players']:
+        status = 'confirmed'
+    else:
+        status = 'waitlist'
+
+    supabase_client.table('rsvps').insert({
+        'session_id': session['id'],
+        'user_id': payload.member.id,
+        'status': status,
+        'order_position': new_order
+    }).execute()
+
+async def add_rsvp_old(bot, payload):
     id = payload.message_id
     response = supabase.table('event_data').select("*").eq("id", id).execute()
     rsvp = response.data[0]['rsvp_list']
@@ -38,8 +59,32 @@ async def add_rsvp(bot, payload):
     await update_rsvp_message(bot, payload, rsvp, waitlist, rsvp_id)
     return
 
+async def remove_rsvp_db(message, payload):
+    supabase_client = get_supabase_client()
+    session = supabase_client.table('sessions').select('*').eq('rsvp_message_id', message.id).execute().data[0]
 
-async def remove_rsvp(bot, payload):
+    if not session:
+        return
+
+    # Remove the RSVP
+    removed_rsvp = supabase_client.table('rsvps').delete().eq('session_id', session['id']).eq('user_id', payload.member.id).execute().data[0]
+
+    if removed_rsvp['status'] == 'confirmed':
+        # Find the first person on the waitlist
+        first_waitlist = supabase_client.table('rsvps').select('*').eq('session_id', session['id']).eq('status', 'waitlist').order('order_position').limit(1).execute().data
+
+        if first_waitlist:
+            # Move the first waitlisted person to confirmed status
+            supabase_client.table('rsvps').update({'status': 'confirmed'}).eq('id', first_waitlist[0]['id']).execute()
+
+    # Reorder the remaining RSVPs
+    all_rsvps = supabase_client.table('rsvps').select('*').eq('session_id', session['id']).order('order_position').execute().data
+
+    for i, rsvp in enumerate(all_rsvps, start=1):
+        supabase_client.table('rsvps').update({'order_position': i}).eq('id', rsvp['id']).execute()
+
+
+async def remove_rsvp_old(bot, payload):
     id = payload.message_id
     response = supabase.table('event_data').select("*").eq("id", id).execute()
     rsvp = response.data[0]['rsvp_list']
@@ -70,6 +115,7 @@ async def delete_event(bot, payload):
 
     channel = bot.get_channel(payload.channel_id)
     id = payload.message_id
+    # SELECT * FROM event_data WHERE id = id
     response = supabase.table('event_data').select("*").eq("id", id).execute()
     rsvp_id = response.data[0]['rsvp_id']
 
@@ -80,6 +126,7 @@ async def delete_event(bot, payload):
     await message2.delete()
     supabase.table('event_data').delete().eq("id", id).execute()
     return
+
 
 async def update_rsvp_message(bot, payload, rsvp, waitlist, rsvp_id):
     channel = bot.get_channel(payload.channel_id)
@@ -96,5 +143,3 @@ async def update_rsvp_message(bot, payload, rsvp, waitlist, rsvp_id):
         await message.edit(content=f"{rsvp_message_content}\n{waitlist_message_content}")
     else:
         print(f"Channel with ID {payload.channel_id} not found.")
-
-
