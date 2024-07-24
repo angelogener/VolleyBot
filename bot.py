@@ -312,6 +312,26 @@ async def list_teams(interaction: discord.Interaction, session_id: int):
         team_display += f"Team {team['team_number']}: {', '.join([interaction.guild.get_member(member['user_id']).name for member in team_members])}\n"
     await interaction.response.send_message(team_display)
 
+@bot.tree.command(name="move-player", description="Move a player from one team to another team")
+async def move_player(interaction: discord.Interaction, session_id: int, player: discord.Member, team_number: int):
+    """
+    Move a player from one team to another team
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    player : int
+        The player to move.
+    team_number : int
+        The number of the team to move the player to.
+    """
+    supabase_client = get_supabase_client()
+    team = supabase_client.table('teams').select('id').eq('session_id', session_id).eq('team_number', team_number).execute().data[0]
+    supabase_client.table('team_members').update({'team_id': team['id']}).eq('user_id', player.id).execute()
+    await interaction.response.send_message(f"Player {player.name} has been moved to team {team_number}.")
+
 @bot.tree.command(name="create-group", description="Create a new group.")
 async def create_group(interaction: discord.Interaction, session_id: int, group_name: str, members: str):
     """
@@ -362,6 +382,49 @@ async def list_groups(interaction: discord.Interaction, session_id: int):
         group_members = supabase_client.table('player_group_members').select('user_id').eq('group_id', group['id']).execute().data
         group_display += f"Group {group['group_name']} ({group['id']}): {', '.join([interaction.guild.get_member(member['user_id']).name for member in group_members])}\n"
     await interaction.response.send_message(group_display or "No groups found.")
+
+@bot.tree.command(name="add-group-members", description="Add members to a group.")
+async def add_group_members(interaction: discord.Interaction, group_id: int, members: str):
+    """
+    Add members to a group.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    group_id : int
+        The ID of the group.
+    members : str
+        The list of members to add to the group.
+    """
+    supabase_client = get_supabase_client()
+    members = [int(re.findall(r'\d+', member)[0]) for member in members.split()]
+    for member in members:
+        member = interaction.guild.get_member(member)
+        supabase_client.table('player_group_members').insert({
+            'group_id': group_id,
+            'user_id': member.id
+        }).execute()
+    await interaction.response.send_message(f"Members {members} have been added to group {group_id}.")
+
+@bot.tree.command(name="remove-group-members", description="Remove members from a group.")
+async def remove_group_members(interaction: discord.Interaction, group_id: int, members: str):
+    """
+    Remove members from a group.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    group_id : int
+        The ID of the group.
+    members : str
+        The list of members to remove from the group.
+    """
+    supabase_client = get_supabase_client()
+    members = [int(re.findall(r'\d+', member)[0]) for member in members.split()]
+    for member in members:
+        member = interaction.guild.get_member(member)
+        supabase_client.table('player_group_members').delete().eq('group_id', group_id).eq('user_id', member.id).execute()
+    await interaction.response.send_message(f"Members {members} have been removed from group {group_id}.")
 
 @bot.tree.command(name="delete-group", description="Delete a group.")
 async def delete_group(interaction: discord.Interaction, group_id: int):
