@@ -49,6 +49,19 @@ CREATE TABLE matches (
     winner_id INTEGER REFERENCES teams(id)
 );
 
+-- Create player groups table
+CREATE TABLE player_groups (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER REFERENCES sessions(id),
+    group_name TEXT NOT NULL
+);
+
+-- Create player group members table
+CREATE TABLE player_group_members (
+    id SERIAL PRIMARY KEY,
+    group_id INTEGER REFERENCES player_groups(id),
+    user_id BIGINT NOT NULL
+);
 -- Create indexes for faster querying
 CREATE INDEX idx_rsvps_session_id ON rsvps(session_id);
 CREATE INDEX idx_rsvps_user_id ON rsvps(user_id);
