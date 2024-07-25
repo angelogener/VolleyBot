@@ -12,6 +12,19 @@ def form_teams(session_id: int, num_teams: int):
     # Get all RSVPs for the session
     rsvps = supabase_client.table('rsvps').select('*').eq('session_id', session_id).eq('status', 'confirmed').order('order_position').execute().data
 
+    # Get all existing users
+    existing_users = supabase_client.table('users').select('id').execute().data
+    existing_user_ids = set(user['id'] for user in existing_users)
+
+    # Check and add new users
+    new_users = []
+    for rsvp in rsvps:
+        if rsvp['user_id'] not in existing_user_ids:
+            new_users.append({'id': rsvp['user_id']})  # Default ELO of 1000
+
+    if new_users:
+        supabase_client.table('users').insert(new_users).execute()
+
     # Get all groups for the session
     groups = supabase_client.table('player_groups').select('*').eq('session_id', session_id).execute().data
     group_members = supabase_client.table('player_group_members').select('*').execute().data

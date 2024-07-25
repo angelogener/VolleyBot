@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import itertools
+import math
 import random
 import discord
 import os
@@ -12,6 +14,7 @@ from constructors.team import Team
 from discord.ext import commands
 
 from constructors.team_builder import form_teams, generate_teams, generate_balanced, team_string, date_string
+from elo import update_elo
 from saves.load_file import load_data, save_data
 from event.rsvp import add_rsvp_db, insert_event, delete_event, remove_rsvp_db
 from helpers import has_planner_role, has_planner_role_interaction
@@ -42,8 +45,6 @@ async def on_ready():
     """
     global all_players
     all_players = load_data()
-    # await bot.tree.sync()
-    # print("Commands synced")
 
     print(f'{bot.user} is now running!')
 
@@ -275,6 +276,7 @@ async def create_teams(interaction: discord.Interaction, session_id: int, num_te
     """
     supabase_client = get_supabase_client()
     supabase_client.table('team_members').delete().neq('id', -1).execute()
+    supabase_client.table('matches').delete().eq('session_id', session_id).execute()
     supabase_client.table('teams').delete().eq('session_id', session_id).execute()
     teams = form_teams(session_id, num_teams)
     # Store teams in the database
@@ -309,7 +311,7 @@ async def list_teams(interaction: discord.Interaction, session_id: int):
     team_display = ""
     for team in teams:
         team_members = supabase_client.table('team_members').select('user_id').eq('team_id', team['id']).execute().data
-        team_display += f"Team {team['team_number']}: {', '.join([interaction.guild.get_member(member['user_id']).name for member in team_members])}\n"
+        team_display += f"Team {team['team_number']} ({team['id']}): {', '.join([interaction.guild.get_member(member['user_id']).name for member in team_members])}\n"
     await interaction.response.send_message(team_display)
 
 @bot.tree.command(name="move-player", description="Move a player from one team to another team")
@@ -441,6 +443,75 @@ async def delete_group(interaction: discord.Interaction, group_id: int):
     supabase_client.table('player_group_members').delete().eq('group_id', group_id).execute()
     supabase_client.table('player_groups').delete().eq('id', group_id).execute()
     await interaction.response.send_message(f"Group {group_id} has been deleted.")
+
+@bot.tree.command(name="create-match", description="Creates a match for the volleyball session.")
+async def create_match(interaction: discord.Interaction, session_id: int, team_1: int, team_2: int):
+    supabase_client = get_supabase_client()
+    teams = supabase_client.table('teams').select('id, team_number').eq('session_id', session_id).execute().data
+    team_1_id = next(team['id'] for team in teams if team['team_number'] == team_1)
+    team_2_id = next(team['id'] for team in teams if team['team_number'] == team_2)
+
+    supabase_client.table('matches').insert({
+        'session_id': session_id,
+        'team1_id': team_1_id,
+        'team2_id': team_2_id,
+    }).execute()
+    # Calculate ELO
+    await interaction.response.send_message(f"Match created with for Team {team_1} against {team_2}. Good luck!")
+
+@bot.tree.command(name="list-matches", description="List the matches scheduled for the volleyball session.")
+async def list_matches(interaction: discord.Interaction, session_id: int):
+    supabase_client = get_supabase_client()
+    # Get all matches for the session
+    matches = supabase_client.table('matches').select('*').eq('session_id', session_id).neq('completed', True).execute().data
+
+    if not matches:
+        await interaction.response.send_message("No matches scheduled for this session.")
+        return
+
+    # Get team names
+    team_ids = set(match['team1_id'] for match in matches) | set(match['team2_id'] for match in matches)
+    teams = supabase_client.table('teams').select('*').in_('id', list(team_ids)).execute().data
+    team_names = {team['id']: f"Team {team['team_number']}" for team in teams}
+
+    # Create schedule message
+    schedule = "Match Schedule:\n"
+    for match in matches:
+        team1 = team_names[match['team1_id']]
+        team2 = team_names[match['team2_id']]
+        schedule += f"Match {match['id']}: {team1} vs {team2}\n"
+    await interaction.response.send_message(schedule)
+
+@bot.tree.command(name="winner", description="Declare the winning team.")
+async def winner(interaction: discord.Interaction, session_id: int, match_number: int, winning_team_number: int):
+    """
+    Declare the winning team.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    match_number : int
+        The number of the match.
+    winning_team_number : int
+        The number of the winning team.
+    """
+    supabase_client = get_supabase_client()
+    match = supabase_client.table('matches').select('*').eq('session_id', session_id).eq('id', match_number).neq('completed', True).execute().data
+    if not match:
+        await interaction.response.send_message(f"Match {match_number} does not exist or already has been submitted")
+        return
+    match = match[0]
+
+    winning_team_id = supabase_client.table('teams').select('id').eq('session_id', session_id).eq('team_number', winning_team_number).execute().data[0]['id']
+    losing_team_id = match['team1_id'] if match['team2_id'] == winning_team_id else match['team2_id']
+    update_elo(winning_team_id, losing_team_id)
+    supabase_client.table('matches').update({'completed': True, 'winner_id': winning_team_id}).eq('id', match['id']).execute()
+
+    await interaction.response.send_message(f"Team {winning_team_number} has been declared the winner.")
+
+
 
 def run_bot():
     bot.run(TOKEN)
