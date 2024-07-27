@@ -113,13 +113,14 @@ async def clear(interaction: discord.Interaction, value: int):
         The number of messages to clear. Between 1 and 50.
     """
     if not await has_planner_role_interaction(interaction): return
+    await interaction.response.defer()
     try:
-        assert isinstance(value, int), await interaction.response.send_message(f"Not a valid number!", ephemeral=True)
-        assert 0 < value < 51, await interaction.response.send_message(f"Can only be between 1 and 50 messages!", ephemeral=True)
+        assert isinstance(value, int), await interaction.followup.send(f"Not a valid number!", ephemeral=True)
+        assert 0 < value < 51, await interaction.followup.send(f"Can only be between 1 and 50 messages!", ephemeral=True)
     except AssertionError:
         return
     await interaction.channel.purge(limit=value + 1)  # Limit is set to "20 + 1" to include the command message
-    await interaction.response.send_message(f'Cleared the last {value} messages.',
+    await interaction.channel.send(f'Cleared the last {value} messages.',
                    delete_after=5)  # Delete the confirmation message after 5 seconds
 
 @bot.tree.command(name="create-session",description="Create a new volleyball session.")
