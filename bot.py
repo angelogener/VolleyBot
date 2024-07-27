@@ -88,6 +88,20 @@ async def on_raw_reaction_add(payload):
     elif payload.emoji.name == "🗑️":
         await delete_session_db(message)
 
+@bot.event
+async def on_member_join(member):
+    """
+    Welcomes a new member to the server.
+    Parameters
+    ----------
+    member : discord.Member
+        The member that joined the server.
+    """
+    channel = member.guild.system_channel
+    if channel:
+        await channel.send(f'Welcome {member.mention}! Make sure to read through the <#1199212477276246107> channel before you get started!')
+
+
 @bot.command()
 async def clear(ctx, value: int):
     """
@@ -150,7 +164,6 @@ async def create_session(interaction: discord.Interaction, date_time: str, locat
     # Store message ID for later reference
     supabase_client.table('sessions').update({'rsvp_message_id': rsvp_message.id}).eq('id', session_id).execute()
 
-
 @bot.tree.command(name="list-sessions",description="List all upcoming volleyball sessions.")
 async def list_sessions(interaction: discord.Interaction):
     """
@@ -168,7 +181,6 @@ async def list_sessions(interaction: discord.Interaction):
         session_embed.add_field(name=f"Session {session['id']}", value=f"Date: {session['datetime']}\nLocation: {session['location']}\nMax Players: {session['max_players']}", inline=False)
     await interaction.response.send_message(embed=session_embed)
 
-
 @bot.tree.command(name="delete-session",description="Delete a volleyball session.")
 async def delete_session(interaction: discord.Interaction, session_id: int):
     """
@@ -184,7 +196,6 @@ async def delete_session(interaction: discord.Interaction, session_id: int):
     supabase_client.table('rsvps').delete().eq('session_id', session_id).execute()
     supabase_client.table('sessions').delete().eq('id', session_id).execute()
     await interaction.response.send_message(f"Session {session_id} has been deleted.")
-
 
 @bot.tree.command(name="add-players", description="Add players to the volleyball session player list.")
 async def add_players(interaction: discord.Interaction, session_id: int, players: str):
@@ -207,7 +218,6 @@ async def add_players(interaction: discord.Interaction, session_id: int, players
         supabase_client.table('rsvps').insert({'session_id': session_id, 'user_id': player, 'status': 'confirmed', 'order_position': random.randint(-10000, -1)}).execute()
     await interaction.response.send_message(f"Players {', '.join(player_names)} have been added to session {session_id}.")
 
-
 @bot.tree.command(name="remove-players", description="Remove players from the volleyball session player list.")
 async def remove_players(interaction: discord.Interaction, session_id: int, players: str):
     """
@@ -229,7 +239,6 @@ async def remove_players(interaction: discord.Interaction, session_id: int, play
         supabase_client.table('rsvps').delete().eq('session_id', session_id).eq('user_id', player).execute()
     await interaction.response.send_message(f"Players {', '.join(player_names)} have been removed from session {session_id}.")
 
-
 @bot.tree.command(name="list-players", description="List the players in the volleyball session player list.")
 async def list_players(interaction: discord.Interaction, session_id: int):
     """
@@ -247,7 +256,6 @@ async def list_players(interaction: discord.Interaction, session_id: int):
     waitlist = [f"<@{player['user_id']}>" for player in players if player['status'] == 'waitlist']
     embed = discord.Embed(title=f"Players in session {session_id}", color=0x00ff00).add_field(name="Confirmed", value=", ".join(player_list), inline=False).add_field(name="Waitlist", value=", ".join(waitlist), inline=False)
     await interaction.response.send_message(embed=embed)
-
 
 @bot.tree.command(name="create-teams", description="Create teams for the volleyball session.")
 async def create_teams(interaction: discord.Interaction, session_id: int, num_teams: int = 2):
@@ -544,7 +552,6 @@ async def winner(interaction: discord.Interaction, session_id: int, match_number
     supabase_client.table('matches').update({'completed': True, 'winner_id': winning_team_id}).eq('id', match['id']).execute()
 
     await interaction.response.send_message(f"Team {winning_team_number} has been declared the winner for Match {match_number}, congrats!")
-
 
 def run_bot():
     bot.run(TOKEN)

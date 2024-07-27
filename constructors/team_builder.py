@@ -108,7 +108,7 @@ def form_balanced_teams(session_id: int, num_teams: int):
     teams = [[] for _ in range(num_teams)]
 
     # First, distribute grouped players
-    for group_id, players in grouped_players.items():
+    for _, players in grouped_players.items():
         team_index = min(range(num_teams), key=lambda i: sum(user_elos.get(user_id, DEFAULT_ELO) for user_id in teams[i]))
         teams[team_index].extend(players)
 
