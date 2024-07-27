@@ -1,19 +1,12 @@
 # Boots up bot!
 import bot
-import atexit
-
-from constructors.game import Game
-from constructors.player import Player
-from constructors.team import Team
-from constructors.team_builder import generate_teams, generate_balanced, team_string
-from saves.load_file import load_data, save_data
 
 if __name__ == '__main__':
 
     # Runs the Bot
     bot.run_bot()
-    atexit.register(lambda: save_data('player_data.csv', bot.save_players()))
-    
+    # atexit.register(lambda: save_data('player_data.csv', bot.save_players()))
+
 
     """
     # This code is to fix incorrect/duplicated Player ID's

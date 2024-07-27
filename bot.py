@@ -1,31 +1,25 @@
-import asyncio
-import datetime
-import discord
 import os
+import random
+import re
+
+import discord
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
-from constructors.game import Game
-from constructors.player import Player
-from constructors.team import Team
-from discord.ext import commands
-
-from constructors.team_builder import generate_teams, generate_balanced, team_string, date_string
-from saves.load_file import load_data, save_data
+from constructors.team_builder import form_balanced_teams, form_teams
+from db.supabase import get_supabase_client
+from elo import update_elo
+from event.rsvp import (add_rsvp_db, remove_rsvp_db,
+                        update_rsvp_message)
+from helpers import has_planner_role, has_planner_role_interaction
 
 load_dotenv()
 
 # Global Variables
-FILE_NAME = 'player_data.csv'
 TOKEN = os.environ.get('DISCORD_TOKEN')
 intents = discord.Intents.all()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-
-all_players: dict[int, Player]  # All past and current attendees to volleyball
-players: list[int]  # Player ID's with their Names for team builder
-teams: dict[int, Team]  # A list of Teams
-curr_game: Game  # The current Game
-curr_guild: discord.guild  # The current Guild
 
 
 @bot.event
@@ -34,637 +28,584 @@ async def on_ready():
     Prepares the bot for use. Will load player data.
     :return: None
     """
-    global all_players
-    all_players = load_data()
-
 
     print(f'{bot.user} is now running!')
+    keep_supabase_alive.start()
 
+@bot.command(name='sync')
+async def sync_commands(ctx):
+    if not has_planner_role(ctx): return
+    guild = ctx.guild
+    ctx.bot.tree.copy_global_to(guild=guild)
+    await ctx.bot.tree.sync(guild=guild)
+    await ctx.send("Synced!")
 
-@bot.command()
-async def shuffle(ctx, num_teams: int = 0):
+@bot.command(name='deletecommands')
+async def delete_commands(ctx):
+    if not has_planner_role(ctx): return
+    guild = ctx.guild
+    ctx.bot.tree.clear_commands(guild=guild)
+    ctx.bot.tree.clear_commands(guild=None)
+    await ctx.bot.tree.sync()
+    await ctx.send("Cleared!")
+
+@tasks.loop(hours=6)
+async def keep_supabase_alive():
+    supabase_client = get_supabase_client()
+    supabase_client.table('teams').select('*').execute()
+
+@bot.event
+async def on_raw_reaction_add(payload):
     """
-    Shuffle users that RSVP'd into teams.
-    :param ctx: The Message.
-    :param num_teams: An optional parameter for the max number of teams.
-    :return: None
+    Adds the user to the RSVP list when they react with a ✅ emoji.
+    Removes the user from the RSVP list when they react with a ❌ emoji.
+    Deletes the event when the user reacts with a 🗑️ emoji.
+
+    Parameters
+    ----------
+    payload : discord.RawReactionActionEvent
+        The payload of the reaction event.
+
+    Returns
+    -------
+    None
     """
-    global teams
-
-    # Delete the command message
-    await ctx.message.delete()
-
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
-
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        return
-    if not players:
-        await ctx.send(f"Please update first!")
+    if payload.member == bot.user:
         return
 
-    await ctx.send(f"You currently have **{len(players)} players.**")  # Output the number of players
+    channel = bot.get_channel(payload.channel_id)
+    message = await channel.fetch_message(payload.message_id)
 
-    # In the case we try to make teams with less than 12 players
-    if len(players) < 12:
-        await ctx.send(f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
-                       f"_ _")
+    if payload.emoji.name == "✅":
+        await add_rsvp_db(message, payload)
+        await message.remove_reaction("✅", payload.member)
+        await update_rsvp_message(message)
+        # update rsvp message
+    elif payload.emoji.name == "❌":
+        await remove_rsvp_db(message, payload)
+        await message.remove_reaction("❌", payload.member)
+        await update_rsvp_message(message)
 
-    # Now create teams...
-    curr_players = []
-    for num in players:
-        curr_players.append(all_players[num])
-
-    # Compute number of teams
-    if num_teams <= 0:
-        num_teams = max(len(players)//6, 2)
-    elif num_teams == 1:
-        await ctx.send(f"You cannot have **{len(players)} players on one team.**")
-
-    teams = generate_teams(curr_players, num_teams)
-    result = team_string(teams)
-
-    await ctx.send(result)
-    return
-
-
-@bot.command()
-async def balance(ctx, num_teams: int = 0):
+@bot.event
+async def on_member_join(member):
     """
-    Matchmake the users that RSVP'd into balanced teams.
-    :param ctx: The Message
-    :param num_teams: An optional parameter for the max number of teams.
-    :return: None
+    Welcomes a new member to the server.
+    Parameters
+    ----------
+    member : discord.Member
+        The member that joined the server.
     """
-    global teams
-
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"_ _")
-
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
-
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        return
-
-    if not players:
-        await ctx.send(f"Please update first!")
-        return
-
-    await ctx.send(f"You currently have **{len(players)} players.**")  # Output the number of players
-
-    # In the case we try to make teams with less than 12 players
-    if len(players) < 12:
-        await ctx.send(f"You will need **{12 - len(players)} more players** to make at least two full teams! \n"
-                       f"_ _")
-    # Now create teams...
-    curr_players = []
-    for num in players:
-        curr_players.append(all_players[num])
-
-    # Compute number of teams
-    if num_teams <= 0:
-        num_teams = max(len(players)//6, 2)
-    elif num_teams == 1:
-        await ctx.send(f"You cannot have **{len(players)} players on one team.**")
-
-    teams = generate_balanced(curr_players, num_teams)
-    result = team_string(teams)
-
-    await ctx.send(result)
-    return
+    channel = member.guild.system_channel
+    if channel:
+        await channel.send(f'Welcome {member.mention}! Make sure to read through the <#1199212477276246107> channel before you get started!')
 
 
-@bot.command(name='game')
-async def creategame(ctx, *, disc_teams: str):
-    """
-    Creates a Game object from the Two teams.
-    :param ctx: The message
-    :param disc_teams: The string containing the Teams to pit against.
-    :return: None
-    """
-    global curr_game
-
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"_ _")
-
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
-
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        return
-    if not teams:
-        await ctx.send("Please make teams first!")
-        return
-
-    opponents = disc_teams.lower().split(',')
-    gamers = []
-
-    # Cast 'int' to numbered string
-    try:
-        opponents = [int(num) for num in opponents]
-    except ValueError:
-        await ctx.send(f"Must input the team numbers!")
-        return
-
-    # Handles case where there weren't exactly 2 teams within the message
-    if len(opponents) != 2:
-        await ctx.send("Must input two teams!")
-        return
-
-    # Off case where both strings identical. Weird right?
-    if opponents[0] == opponents[1]:
-        await ctx.send("Can't have the team play itself! What?")
-        return
-
-    # Get the two Teams for the brawl! Checks if both teams exist in the current team dictionary
-    if opponents[0] in teams:
-        gamers.append(teams[opponents[0]])
-    else:
-        await ctx.send("Game could not be played. Please add two valid teams.")
-        return
-
-    if opponents[1] in teams:
-        gamers.append(teams[opponents[1]])
-    else:
-        await ctx.send("Game could not be played. Please add two valid teams.")
-        return
-
-    curr_game = Game(gamers[0], gamers[1])
-
-    await ctx.send(f"Prepare for the following matchup: \n"
-                   f"***Team {curr_game.team_one.get_team_number()}*** vs "
-                   f"***Team {curr_game.team_two.get_team_number()}***")
-    return
-
-
-@bot.command()
-async def update(ctx):
-    """
-    Updates the current list of players. Checks all users in the server
-    and ensures that saved Player ID's and Player Names are up-to-date.
-    We then check list of players attending the most recent event and prepare to create teams.
-    :param ctx: The Message
-    :return: None
-    """
-
-    # Obtain the server that the message was sent in
-    global curr_guild, players
-    curr_guild = ctx.guild
-
-    # Delete the command message
-    await ctx.message.delete()
-    message = await ctx.send(f"**Updating, this might take a while...**\n")
-    print(f"[{get_current_time()}] Starting now")
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(curr_guild.roles, name="Planners")
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        await ctx.send("You don't have the necessary permissions to use this command.")
-        return
-
-    users = {}
-    async for person in curr_guild.fetch_members():
-        users[person.display_name]: person.id
-    print(f"[{get_current_time()}] Got players")
-
-    # Obtain this server's latest Volleyball event
-    events = curr_guild.scheduled_events
-    print(f"[{get_current_time()}] Got events: {events}")
-    if len(events) == 0:
-        await ctx.send("Please make an event first!")
-        return
-
-    curr_event = events[0]
-    message = await message.edit(content="Obtained players who RSVP'd! Thank you signing up!")
-
-    try:
-        reacted = []
-
-        # Now goes through each of the users that reacted
-        async for user in curr_event.users():
-            reacted.append(user.id)
-
-        # We obtain all the users who indicated they are coming and fetch nicknames (if they have any)
-        # We then try to add them to our list of players
-
-        await update_players(reacted)
-        players = reacted
-
-        await message.edit(content="Updated player roster!")
-
-        return
-
-    except Exception as e:
-        await ctx.send(f"An error occurred: {str(e)}")
-
-
-@bot.command()
-async def audit(ctx):
-    """
-    Check list of players attending the most recent event and audit RSVP's.
-    :param ctx: The Message
-    :return: None
-    """
-
-    # Obtain the server that the message was sent in
-    global curr_guild, players
-    curr_guild = ctx.guild
-
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"**Player List as of {date_string()}**\n")
-
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(curr_guild.roles, name="Planners")
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        await ctx.send("You don't have the necessary permissions to use this command.")
-        return
-    try:
-        curr_players = {}
-        i = 1
-        for oop in players:
-            curr_players[i] = all_players[oop].get_name().capitalize()
-            i += 1
-
-        final_str = ''
-        for react in curr_players:
-            final_str += f'{react}) {curr_players[react]} \n'
-
-        await ctx.send(f"{final_str}")
-
-        return
-
-    except Exception as e:
-        await ctx.send(f"An error occurred: {str(e)}")
-
-
-@bot.command()
-async def rsvp(ctx, *members: commands.MemberConverter):
-    """
-    For players who did not RSVP but arrived, add them to the list of players.
-    :param ctx: The Message.
-    :param members: An unspecified number of users to add.
-    :return:
-    """
-
-    # Obtain the server that the message was sent in
-    global curr_guild, players
-    curr_guild = ctx.guild
-
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"**---------------**\n" + f"**Updating...**\n" + f"_ _")
-
-    try:
-        # Now goes through each of the users that reacted
-        late = [member.id for member in members]
-
-        # We obtain all the users who indicated they are coming and fetch nicknames (if they have any)
-        # We then try to add them to our list of players
-        await ctx.send(f"Adding players!")
-        await update_players(late)
-
-        temp_list = set(late) - set(players)  # Obtain unique players
-        players.extend(temp_list)
-
-        await ctx.send(f"Ready!")
-        return
-
-    except Exception as e:
-        await ctx.send(f"An error occurred: {str(e)}")
-
-
-@bot.command()
-async def clear(ctx, value: int):
+@bot.tree.command(name="clear",description="Clears the specified number of messages.")
+async def clear(interaction: discord.Interaction, value: int):
     """
     Purges the last couple of messages, determined by value.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    value : int
+        The number of messages to clear. Between 1 and 50.
     """
-
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
-
-    """if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        await ctx.send("You don't have the necessary permissions to use this command.")
-        return"""
-    assert isinstance(value, int), await ctx.send(f"Not a valid number!")
-    assert 0 < value < 51, await ctx.send(f"Can only be between 1 and 50 messages!")
-
-    await ctx.channel.purge(limit=value + 1)  # Limit is set to "20 + 1" to include the command message
-    await ctx.send(f'Cleared the last {value} messages.',
+    if not await has_planner_role_interaction(interaction): return
+    try:
+        assert isinstance(value, int), await interaction.response.send_message(f"Not a valid number!", ephemeral=True)
+        assert 0 < value < 51, await interaction.response.send_message(f"Can only be between 1 and 50 messages!", ephemeral=True)
+    except AssertionError:
+        return
+    await interaction.channel.purge(limit=value + 1)  # Limit is set to "20 + 1" to include the command message
+    await interaction.response.send_message(f'Cleared the last {value} messages.',
                    delete_after=5)  # Delete the confirmation message after 5 seconds
 
-
-@bot.command(name='win')
-async def winner(ctx, champ: str):
+@bot.tree.command(name="create-session",description="Create a new volleyball session.")
+async def create_session(interaction: discord.Interaction, date_time: str, location: str, max_players: int):
     """
-    Declares the winning team of the game! Ensures all players from each team
-    gets their ratings updated.
-    :param ctx: The message.
-    :param champ: The string representation of the winning team
-    :return: None
+    Creates a new volleyball session and sends an RSVP message to the channel.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    date_time : str
+        The date and time of the session.
+    location : str
+        The location of the session.
+    max_players : int
+        The maximum number of players allowed in the session.
     """
-    global curr_game
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    session_data = {
+        'datetime': date_time,
+        'location': location,
+        'max_players': max_players
+    }
+    result = supabase_client.table('sessions').insert(session_data).execute()
+    session_id = result.data[0]['id']
 
-    # Delete the command message
-    await ctx.message.delete()
+    # Create and send RSVP message
+    event_embed = discord.Embed(
+                    title="Volleyball Session", color=0x00ff00
+                ).add_field(
+                    name="Date",
+                    value=date_time,
+                    inline=False
+                ).add_field(
+                    name="Location",
+                    value=location,
+                    inline=False
+                ).add_field(
+                    name="Max Players",
+                    value=max_players,
+                    inline=False
+                ).set_footer(
+                    text="React with a ✅ to RSVP. If you can no longer make it react with a ❌ to give up your spot to someone else!")
 
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
+    await interaction.response.send_message(embed=event_embed)
+    rsvp_message = await interaction.original_response()
+    await rsvp_message.add_reaction("✅")
+    await rsvp_message.add_reaction("❌")
+    # Store message ID for later reference
+    supabase_client.table('sessions').update({'rsvp_message_id': rsvp_message.id}).eq('id', session_id).execute()
 
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        return
-
-    if not curr_game:
-        await ctx.send("Please make a game first!")
-        return
-
-    # Cast 'int' to numbered string
-    try:
-        team_num = int(champ)
-    except ValueError:
-        await ctx.send(f"Input the winning team's number!")
-        return
-    if int(champ) not in curr_game.get_team_numbers():
-        await ctx.send(f"Please enter a valid winner!")
-        return
-
-    curr_game.play_game(team_num)
-
-    await ctx.send(f"Congratulations to ***Team {curr_game.get_winner().get_team_number()}*** for taking the "
-                   f"cake!")
-    # Game is done! So we have no more current game!
-    curr_game = None
-
-    # Now we update the .csv with the changes
-    save_data(all_players)
-
-
-@bot.command()
-async def deleteteam(ctx, to_delete: str):
+@bot.tree.command(name="list-sessions",description="List all upcoming volleyball sessions.")
+async def list_sessions(interaction: discord.Interaction):
     """
-    Delete the specified team.
-    :param ctx: The message
-    :param to_delete: The string representation of the team to be deleted
-    :return: None
+    Lists all upcoming volleyball sessions.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
     """
-    global teams
+    supabase_client = get_supabase_client()
+    sessions = supabase_client.table('sessions').select('*').neq('completed', True).order('id', desc=True).limit(5).execute().data
 
-    # Delete the command message
-    await ctx.message.delete()
+    session_embed = discord.Embed(title="Upcoming Volleyball Sessions", color=0x00ff00)
+    for session in sessions:
+        session_embed.add_field(name=f"Session {session['id']}", value=f"Date: {session['datetime']}\nLocation: {session['location']}\nMax Players: {session['max_players']}", inline=False)
+    await interaction.response.send_message(embed=session_embed)
 
-    # Cast 'int' to numbered string
-    try:
-        team_num = int(to_delete)
-    except ValueError:
-        await ctx.send(f"Input the number of the team to delete!")
-        return
-
-    await ctx.send(f"_ _")
-
-    if team_num not in teams:
-        await ctx.send(f"Please enter a valid team")
-        return
-    del teams[team_num]
-    await ctx.send(f"**Team {team_num}*** has been disbanded. \n"
-                   f"Thanks for playing!")
-    return
-
-
-@bot.command()
-async def addplayer(ctx, *, ctx_input: str):
+@bot.tree.command(name="delete-session",description="Delete a volleyball session.")
+async def delete_session(interaction: discord.Interaction, session_id: int):
     """
-    Adds a player to a given team. Accounts for players that did not RSVP.
-    :param ctx: The Message.
-    :param ctx_input: Split into names
-    :return:
+    Deletes a volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session to delete.
     """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    supabase_client.table('rsvps').delete().eq('session_id', session_id).execute()
+    supabase_client.table('sessions').delete().eq('id', session_id).execute()
+    await interaction.response.send_message(f"Session {session_id} has been deleted.")
 
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
-
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
-        return
-
-    # Avoid infinite loops by ignoring messages from the bot itself
-    if ctx.author == bot.user:
-        return
-
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"_ _")
-
-    if not teams:
-        await ctx.send("Please make teams first!")
-        return
-
-    words = ctx_input.lower().split(',')
-
-    # Handles case where there weren't exactly "teams" within the string
-    if len(words) != 2:
-        await ctx.send("Must input a player and a team!")
-        return
-
-    mentioned_users = ctx.message.mentions
-
-    if not mentioned_users:
-        await ctx.send("Please mention which user to add!")
-        return
-    elif len(mentioned_users) > 1:
-        await ctx
-
-    person = mentioned_users[0]
-    # If they have not been instantiated in all_players
-    if person.id not in all_players:
-        await update_players([person.id])
-
-    # If they forgot to RSVP
-    if person.id not in players:
-        players.append(person.id)
-
-    to_team = words[1].lower().strip()
-    if to_team not in teams:
-        await ctx.send("Please enter valid team!")
-        return
-
-    teams[to_team].add_player(all_players[person.id])
-    await ctx.send(f"**{all_players[person.id].get_name().title()}** "
-                   f"has joined **Team {teams[to_team].get_team_name().title()}**!")
-    return
-
-
-@bot.command()
-async def removeplayer(ctx, *, ctx_input: str):
+@bot.tree.command(name="end-session",description="End a volleyball session.")
+async def end_session(interaction: discord.Interaction, session_id: int):
     """
-    Removes a player from a given team. Both items must exist and be specified correctly.
-    :param ctx: The Message.
-    :param ctx_input: The string containing the player and team they currently belong to
-    :return:
+    Ends a volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session to end.
     """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    supabase_client.table('sessions').update({'completed': True}).eq('id', session_id).execute()
+    await interaction.response.send_message(f"Session {session_id} has been ended.")
 
-    # Specifically add Planners as the sole role capable of using this command
-    role_access = discord.utils.get(ctx.guild.roles, name="Planners")
+@bot.tree.command(name="add-players", description="Add players to the volleyball session player list.")
+async def add_players(interaction: discord.Interaction, session_id: int, players: str):
+    """
+    Adds players to the volleyball session player list.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    players : list[int]
+        The list of player IDs to add.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    # Get the list of players from string of mentions
+    players = [int(re.findall(r'\d+', player)[0]) for player in players.split()]
+    player_names = [interaction.guild.get_member(player).name for player in players]
+    for player in players:
+        supabase_client.table('rsvps').insert({'session_id': session_id, 'user_id': player, 'status': 'confirmed', 'order_position': random.randint(-10000, -1)}).execute()
+    await interaction.response.send_message(f"Players {', '.join(player_names)} have been added to session {session_id}.")
 
-    if role_access not in ctx.author.roles:
-        # Non-planners will get no response
+@bot.tree.command(name="remove-players", description="Remove players from the volleyball session player list.")
+async def remove_players(interaction: discord.Interaction, session_id: int, players: str):
+    """
+    Removes players from the volleyball session player list.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    players : list[int]
+        The list of player IDs to remove.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    # Get the list of players from string of mentions
+    players = [int(re.findall(r'\d+', player)[0]) for player in players.split()]
+    player_names = [interaction.guild.get_member(player).name for player in players]
+    for player in players:
+        supabase_client.table('rsvps').delete().eq('session_id', session_id).eq('user_id', player).execute()
+    await interaction.response.send_message(f"Players {', '.join(player_names)} have been removed from session {session_id}.")
+
+@bot.tree.command(name="list-players", description="List the players in the volleyball session player list.")
+async def list_players(interaction: discord.Interaction, session_id: int):
+    """
+    Lists the players in the volleyball session player list.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    """
+    supabase_client = get_supabase_client()
+    players = supabase_client.table('rsvps').select('user_id', 'status').eq('session_id', session_id).execute().data
+    player_list = [f"<@{player['user_id']}>" for player in players if player['status'] == 'confirmed']
+    waitlist = [f"<@{player['user_id']}>" for player in players if player['status'] == 'waitlist']
+    embed = discord.Embed(title=f"Players in session {session_id}", color=0x00ff00).add_field(name="Confirmed", value=", ".join(player_list), inline=False).add_field(name="Waitlist", value=", ".join(waitlist), inline=False)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="create-teams", description="Create teams for the volleyball session.")
+async def create_teams(interaction: discord.Interaction, session_id: int, num_teams: int = 2):
+    """
+    Creates teams for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    num_teams : int
+        The number of teams to create.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    await interaction.response.defer()
+    supabase_client = get_supabase_client()
+    supabase_client.table('team_members').delete().neq('id', -1).execute()
+    supabase_client.table('matches').delete().eq('session_id', session_id).execute()
+    supabase_client.table('teams').delete().eq('session_id', session_id).execute()
+    teams = form_teams(session_id, num_teams)
+    # Store teams in the database
+    for i, team in enumerate(teams, start=1):
+        team_data = {'session_id': session_id, 'team_number': i}
+        team_result = supabase_client.table('teams').insert(team_data).execute().data[0]
+
+        for player in team:
+            supabase_client.table('team_members').insert({
+                'team_id': team_result['id'],
+                'user_id': player
+            }).execute()
+
+    # Display teams
+    embed = discord.Embed(title=f"Session {session_id} Teams", color=0x00ff00)
+    for team_member_ids in teams:
+        team_members = [interaction.guild.get_member(user_id).mention for user_id in team_member_ids]
+        embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value=", ".join(team_members), inline=False)
+    await interaction.followup.send(embed=embed)
+
+@bot.tree.command(name="create-balanced-teams", description="Create balanced teams for the volleyball session.")
+async def create_balanced_teams(interaction: discord.Interaction, session_id: int, num_teams: int = 2):
+    """
+    Creates balanced teams for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    num_teams : int
+        The number of teams to create.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    supabase_client.table('team_members').delete().neq('id', -1).execute()
+    supabase_client.table('matches').delete().eq('session_id', session_id).execute()
+    supabase_client.table('teams').delete().eq('session_id', session_id).execute()
+    teams = form_balanced_teams(session_id, num_teams)
+
+    # Store teams in the database
+    for i, team in enumerate(teams, start=1):
+        team_data = {'session_id': session_id, 'team_number': i}
+        team_result = supabase_client.table('teams').insert(team_data).execute().data[0]
+
+        for player in team:
+            supabase_client.table('team_members').insert({
+                'team_id': team_result['id'],
+                'user_id': player
+            }).execute()
+
+    # Display teams
+    embed = discord.Embed(title=f"Session {session_id} Teams", color=0x00ff00)
+    for team_member_ids in teams:
+        team_members = [interaction.guild.get_member(user_id).mention for user_id in team_member_ids]
+        embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value=", ".join(team_members), inline=False)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="list-teams", description="List the teams for the volleyball session.")
+async def list_teams(interaction: discord.Interaction, session_id: int):
+    """
+    Lists the teams for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    """
+    supabase_client = get_supabase_client()
+    teams = supabase_client.table('teams').select('*').eq('session_id', session_id).execute().data
+    embed = discord.Embed(title=f"Session {session_id} Teams")
+    for team in teams:
+        team_members = supabase_client.table('team_members').select('user_id').eq('team_id', team['id']).execute().data
+        embed.add_field(name=f"Team {team['team_number']}", value=", ".join([interaction.guild.get_member(member['user_id']).mention for member in team_members]), inline=False)
+    await interaction.response.send_message(embed=embed or "No teams found.")
+
+@bot.tree.command(name="move-player", description="Move a player from one team to another team")
+async def move_player(interaction: discord.Interaction, session_id: int, player: discord.Member, team_number: int):
+    """
+    Move a player from one team to another team
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    player : int
+        The player to move.
+    team_number : int
+        The number of the team to move the player to.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    team = supabase_client.table('teams').select('id').eq('session_id', session_id).eq('team_number', team_number).execute().data[0]
+    supabase_client.table('team_members').update({'team_id': team['id']}).eq('user_id', player.id).execute()
+    await interaction.response.send_message(f"Player {player.name} has been moved to team {team_number}.")
+
+@bot.tree.command(name="create-group", description="Create a new group.")
+async def create_group(interaction: discord.Interaction, session_id: int, group_name: str, members: str):
+    """
+    Creates a new group.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    group_name : str
+        The name of the group.
+    members : str
+        The list of members in the group.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    # Create a new group
+    group = supabase_client.table('player_groups').insert({
+        'session_id': session_id,
+        'group_name': group_name
+    }).execute().data[0]
+    members = [int(re.findall(r'\d+', member)[0]) for member in members.split()]
+    # Add members to the group
+    for member in members:
+        member = interaction.guild.get_member(member)
+        supabase_client.table('player_group_members').insert({
+            'group_id': group['id'],
+            'user_id': member.id
+        }).execute()
+    embed = discord.Embed(title=f"Group {group_name}", color=0x00ff00)
+    embed.add_field(name="Members", value=", ".join([interaction.guild.get_member(member).mention for member in members]), inline=False)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="list-groups", description="List the groups for the volleyball session.")
+async def list_groups(interaction: discord.Interaction, session_id: int):
+    """
+    Lists the groups for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    """
+    supabase_client = get_supabase_client()
+    groups = supabase_client.table('player_groups').select('*').eq('session_id', session_id).execute().data
+    embed = discord.Embed(title=f"Session {session_id} Groups")
+    for group in groups:
+        group_members = supabase_client.table('player_group_members').select('user_id').eq('group_id', group['id']).execute().data
+        embed.add_field(name=f"Group {group['group_name']}", value=", ".join([interaction.guild.get_member(member['user_id']).mention for member in group_members]), inline=False)
+    await interaction.response.send_message(embed=embed or "No groups found.")
+
+@bot.tree.command(name="add-group-members", description="Add members to a group.")
+async def add_group_members(interaction: discord.Interaction, group_id: int, members: str):
+    """
+    Add members to a group.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    group_id : int
+        The ID of the group.
+    members : str
+        The list of members to add to the group.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    members = [int(re.findall(r'\d+', member)[0]) for member in members.split()]
+    members_mention = [interaction.guild.get_member(member).mention for member in members]
+    for member in members:
+        member = interaction.guild.get_member(member)
+        supabase_client.table('player_group_members').insert({
+            'group_id': group_id,
+            'user_id': member.id
+        }).execute()
+
+    await interaction.response.send_message(f"Members {', '.join(members_mention)} have been added to group {group_id}.")
+
+@bot.tree.command(name="remove-group-members", description="Remove members from a group.")
+async def remove_group_members(interaction: discord.Interaction, group_id: int, members: str):
+    """
+    Remove members from a group.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    group_id : int
+        The ID of the group.
+    members : str
+        The list of members to remove from the group.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    members = [int(re.findall(r'\d+', member)[0]) for member in members.split()]
+    members_mention = [interaction.guild.get_member(member).mention for member in members]
+    for member in members:
+        member = interaction.guild.get_member(member)
+        supabase_client.table('player_group_members').delete().eq('group_id', group_id).eq('user_id', member.id).execute()
+    await interaction.response.send_message(f"Members {', '.join(members_mention)} have been removed from group {group_id}.")
+
+@bot.tree.command(name="delete-group", description="Delete a group.")
+async def delete_group(interaction: discord.Interaction, group_id: int):
+    """
+    Deletes a group.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    group_id : int
+        The ID of the group to delete.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    supabase_client.table('player_group_members').delete().eq('group_id', group_id).execute()
+    supabase_client.table('player_groups').delete().eq('id', group_id).execute()
+    await interaction.response.send_message(f"Group {group_id} has been deleted.")
+
+@bot.tree.command(name="create-match", description="Creates a match for the volleyball session.")
+async def create_match(interaction: discord.Interaction, session_id: int, team_1: int, team_2: int):
+    """
+    Creates a match for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    team_1 : int
+        The number of the first team.
+    team_2 : int
+        The number of the second team.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    teams = supabase_client.table('teams').select('id, team_number').eq('session_id', session_id).execute().data
+    team_1_id = next(team['id'] for team in teams if team['team_number'] == team_1)
+    team_2_id = next(team['id'] for team in teams if team['team_number'] == team_2)
+
+    supabase_client.table('matches').insert({
+        'session_id': session_id,
+        'team1_id': team_1_id,
+        'team2_id': team_2_id,
+    }).execute()
+    await interaction.response.send_message(f"Match created with for Team {team_1} against {team_2}. Good luck!")
+
+@bot.tree.command(name="list-matches", description="List the matches scheduled for the volleyball session.")
+async def list_matches(interaction: discord.Interaction, session_id: int):
+    """
+    Lists the matches scheduled for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    """
+    supabase_client = get_supabase_client()
+    # Get all matches for the session
+    matches = supabase_client.table('matches').select('*').eq('session_id', session_id).neq('completed', True).execute().data
+
+    if not matches:
+        await interaction.response.send_message("No matches scheduled for this session.")
         return
 
-    # Avoid infinite loops by ignoring messages from the bot itself
-    if ctx.author == bot.user:
+    # Get team names
+    team_ids = set(match['team1_id'] for match in matches) | set(match['team2_id'] for match in matches)
+    teams = supabase_client.table('teams').select('*').in_('id', list(team_ids)).execute().data
+    team_names = {team['id']: f"Team {team['team_number']}" for team in teams}
+
+    # Create schedule message
+    embed = discord.Embed(title="Match Schedule", color=0x00ff00)
+    for match in matches:
+        team1 = team_names[match['team1_id']]
+        team2 = team_names[match['team2_id']]
+        embed.add_field(name=f"Match {match['id']}", value=f"{team1} vs {team2}", inline=False)
+    await interaction.response.send_message(embed=embed or "No matches found.")
+
+@bot.tree.command(name="winner", description="Declare the winning team.")
+async def winner(interaction: discord.Interaction, session_id: int, match_number: int, winning_team_number: int):
+    """
+    Declare the winning team.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    match_number : int
+        The number of the match.
+    winning_team_number : int
+        The number of the winning team.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    match = supabase_client.table('matches').select('*').eq('session_id', session_id).eq('id', match_number).neq('completed', True).execute().data
+    if not match:
+        await interaction.response.send_message(f"Match {match_number} does not exist or already has been submitted")
         return
+    match = match[0]
 
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"_ _")
+    winning_team_id = supabase_client.table('teams').select('id').eq('session_id', session_id).eq('team_number', winning_team_number).execute().data[0]['id']
+    losing_team_id = match['team1_id'] if match['team2_id'] == winning_team_id else match['team2_id']
+    update_elo(winning_team_id, losing_team_id)
+    supabase_client.table('matches').update({'completed': True, 'winner_id': winning_team_id}).eq('id', match['id']).execute()
 
-    if not teams:
-        await ctx.send("Please make teams first!")
-        return
-
-    words = ctx_input.lower().split(',')
-
-    # Handles case where there weren't exactly "teams" within the string
-    if len(words) != 2:
-        await ctx.send("Must input a player and a team!")
-        return
-
-    mentioned_users = ctx.message.mentions
-
-    if not mentioned_users:
-        await ctx.send("Please mention which user to add!")
-        return
-    elif len(mentioned_users) > 1:
-        await ctx.send("Please mention one user!")
-        return
-
-    person = mentioned_users[0]
-
-    to_team = words[1].lower().strip()
-    if to_team not in teams:
-        await ctx.send("Please enter valid team!")
-        return
-
-    # Can you remove player?
-    in_team = False
-    for player in teams[to_team].get_players():
-        if player.get_id() == person.id:
-            in_team = True
-    if not in_team:
-        await ctx.send("Player is not in team!")
-        return
-
-    teams[to_team].remove_player(all_players[person.id])
-    await ctx.send(f"**{all_players[person.id].get_name().title()}** "
-                   f"has left **Team {teams[to_team].get_team_name().title()}**!")
-    return
-
-
-@bot.command()
-async def show(ctx):
-    """
-    Returns current iteration of all Teams.
-
-    :param ctx: The Message.
-    :return: None
-    """
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"_ _")
-
-    await ctx.send(team_string(teams))
-    return
-
-
-@bot.command()
-async def cost(ctx, hours: int):
-    """
-    Returns the split cost of all players attending.
-
-    :param ctx: The Message.
-    :param hours: The number of hours a session is. We assert that hours > 1
-    :return: None
-    """
-    # Delete the command message
-    await ctx.message.delete()
-    await ctx.send(f"_ _")
-
-    RATE = 60
-    people = len(players)
-
-    if type(hours) != int or hours < 1:
-        await ctx.send(f"Please enter a valid number to calculate costs!")
-        return
-
-    per_person = round((RATE * hours) / people, 2)
-
-    await ctx.send(f"Th cost for the **{people} players** coming is ${per_person}")
-    return
-
-
-async def update_players(ids: list[str]) -> None:
-    """
-    Creates a dict of Players who RSVP'd and compares them to the players in the .csv file
-    (players = {}) to see if any changes are to be made.
-    Changes are made IF:
-        - The player has been saved but has changed their display name (1)
-        - The player does not yet exist in the data (1)
-
-    Runs data through clean() to ensure we get the best possible username for teams and sharing.
-
-    :param ids: A list containing the id's of players.
-    :return: None
-    """
-
-    global all_players
-    updated = {}
-    for reacted in ids:
-        member = await curr_guild.fetch_member(int(reacted))
-
-        # 1: The player has been saved but has changed their display name
-        if member.id in all_players and member.display_name != all_players[member.id].name:
-            if clean(member.display_name):
-                # Changes all_players directly
-                all_players[member.id].name = member.display_name.lower()
-
-        # 2: The player does not yet exist in the data
-        elif member.id not in all_players:
-            if clean(member.display_name):
-                updated[member.id] = Player(member.id, member.display_name.lower(), 1200, 0, 0)
-            else:
-                updated[member.id] = Player(member.id, member.name.lower(), 1200, 0, 0)
-
-    all_players.update(updated)
-
-
-def save_players() -> dict[int, Player]:
-    """
-    In the event that a game is played or the bot ends,
-    write and save changes to a file.
-    """
-    return all_players
-
-
-def clean(username: str) -> bool:
-    """
-    Checks if the username is a "clean" string that can be used in csv for saving
-    :param username: The username to check
-    :return: True if username can be used in csv
-    """
-    return isinstance(username, str) and all(ord(char) < 128 for char in username)
-
-
-def get_current_time() -> str:
-    today = datetime.datetime.now()
-    return today.strftime("%H:%M:%S")
+    await interaction.response.send_message(f"Team {winning_team_number} has been declared the winner for Match {match_number}, congrats!")
 
 def run_bot():
     bot.run(TOKEN)
