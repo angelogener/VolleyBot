@@ -100,17 +100,25 @@ async def on_member_join(member):
         await channel.send(f'Welcome {member.mention}! Make sure to read through the <#1199212477276246107> channel before you get started!')
 
 
-@bot.command()
-async def clear(ctx, value: int):
+@bot.tree.command(name="clear",description="Clears the specified number of messages.")
+async def clear(interaction: discord.Interaction, value: int):
     """
     Purges the last couple of messages, determined by value.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    value : int
+        The number of messages to clear. Between 1 and 50.
     """
-    if not has_planner_role(ctx): return
-    assert isinstance(value, int), await ctx.send(f"Not a valid number!")
-    assert 0 < value < 51, await ctx.send(f"Can only be between 1 and 50 messages!")
-
-    await ctx.channel.purge(limit=value + 1)  # Limit is set to "20 + 1" to include the command message
-    await ctx.send(f'Cleared the last {value} messages.',
+    if not await has_planner_role_interaction(interaction): return
+    try:
+        assert isinstance(value, int), await interaction.response.send_message(f"Not a valid number!", ephemeral=True)
+        assert 0 < value < 51, await interaction.response.send_message(f"Can only be between 1 and 50 messages!", ephemeral=True)
+    except AssertionError:
+        return
+    await interaction.channel.purge(limit=value + 1)  # Limit is set to "20 + 1" to include the command message
+    await interaction.response.send_message(f'Cleared the last {value} messages.',
                    delete_after=5)  # Delete the confirmation message after 5 seconds
 
 @bot.tree.command(name="create-session",description="Create a new volleyball session.")
