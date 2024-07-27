@@ -47,6 +47,7 @@ async def delete_commands(ctx):
     ctx.bot.tree.clear_commands(guild=guild)
     ctx.bot.tree.clear_commands(guild=None)
     await ctx.bot.tree.sync()
+    await ctx.bot.tree.sync(guild=guild)
     await ctx.send("Cleared!")
 
 @tasks.loop(hours=6)
