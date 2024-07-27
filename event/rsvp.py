@@ -87,7 +87,7 @@ async def update_rsvp_message(message):
                 inline=False
             ).add_field(
                 name="Max Players",
-                value=session[0]['max_players'],
+                value=f"{len(confirmed_ids)}/{session[0]['max_players']}",
                 inline=False
             ).add_field(
                 name="RSVP",

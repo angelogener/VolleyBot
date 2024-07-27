@@ -161,7 +161,7 @@ async def create_session(interaction: discord.Interaction, date_time: str, locat
                     inline=False
                 ).add_field(
                     name="Max Players",
-                    value=max_players,
+                    value=f"0/{max_players}",
                     inline=False
                 ).set_footer(
                     text="React with a ✅ to RSVP. If you can no longer make it react with a ❌ to give up your spot to someone else!")
