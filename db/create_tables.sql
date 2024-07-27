@@ -4,7 +4,8 @@ CREATE TABLE sessions (
     datetime TEXT NOT NULL,
     location TEXT NOT NULL,
     max_players INTEGER NOT NULL,
-    rsvp_message_id BIGINT
+    rsvp_message_id BIGINT,
+    completed BOOLEAN DEFAULT FALSE
 );
 
 -- Create rsvps table

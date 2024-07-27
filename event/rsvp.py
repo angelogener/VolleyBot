@@ -5,10 +5,14 @@ supabase = get_supabase_client()
 
 async def add_rsvp_db(message, payload):
     supabase_client = get_supabase_client()
-    session = supabase_client.table('sessions').select('*').eq('rsvp_message_id', message.id).execute().data[0]
+    session = supabase_client.table('sessions').select('*').eq('rsvp_message_id', message.id).neq('completed', True).execute().data
+
 
     if not session:
         return
+
+    session = session[0]
+
     # Get the current highest order position for this session
     max_order = supabase_client.table('rsvps').select('order_position').eq('session_id', session['id']).order('order_position', desc=True).limit(1).execute().data
     new_order = 1 if not max_order else max_order[0]['order_position'] + 1
@@ -35,10 +39,12 @@ async def add_rsvp_db(message, payload):
 
 async def remove_rsvp_db(message, payload):
     supabase_client = get_supabase_client()
-    session = supabase_client.table('sessions').select('*').eq('rsvp_message_id', message.id).execute().data[0]
-
+    session = supabase_client.table('sessions').select('*').eq('rsvp_message_id', message.id).neq('completed', True).execute().data
+    print(session)
     if not session:
         return
+
+    session = session[0]
 
     # Remove the RSVP
     removed_rsvp = supabase_client.table('rsvps').delete().eq('session_id', session['id']).eq('user_id', payload.member.id).execute().data[0]
@@ -57,23 +63,11 @@ async def remove_rsvp_db(message, payload):
     for i, rsvp in enumerate(all_rsvps, start=1):
         supabase_client.table('rsvps').update({'order_position': i}).eq('id', rsvp['id']).execute()
 
-async def delete_session_db(message):
-    supabase_client = get_supabase_client()
-    session = supabase_client.table('sessions').select('*').eq('rsvp_message_id', message.id).execute().data
-
-    if not session:
-        return
-
-    session = session[0]
-
-    # Delete the rsvps and session
-    supabase_client.table('rsvps').delete().eq('session_id', session['id']).execute()
-    supabase_client.table('sessions').delete().eq('id', session['id']).execute()
-    await message.delete()
-
 async def update_rsvp_message(message):
     supabase_client = get_supabase_client()
-    session = supabase_client.table('sessions').select('location, datetime, max_players, rsvps(user_id, order_position, status)').eq('rsvp_message_id', message.id).execute().data
+    session = supabase_client.table('sessions').select('location, datetime, max_players, rsvps(user_id, order_position, status)').eq('rsvp_message_id', message.id).neq('completed', True).execute().data
+    if not session:
+        return
     confirmed_ids = []
     waitlist_ids = []
     for rsvp in session[0]['rsvps']:

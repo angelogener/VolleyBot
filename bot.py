@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from constructors.team_builder import form_balanced_teams, form_teams
 from db.supabase import get_supabase_client
 from elo import update_elo
-from event.rsvp import (add_rsvp_db, delete_session_db, remove_rsvp_db,
+from event.rsvp import (add_rsvp_db, remove_rsvp_db,
                         update_rsvp_message)
-from helpers import has_planner_role
+from helpers import has_planner_role, has_planner_role_interaction
 
 load_dotenv()
 
@@ -85,8 +85,6 @@ async def on_raw_reaction_add(payload):
         await remove_rsvp_db(message, payload)
         await message.remove_reaction("❌", payload.member)
         await update_rsvp_message(message)
-    elif payload.emoji.name == "🗑️":
-        await delete_session_db(message)
 
 @bot.event
 async def on_member_join(member):
@@ -130,6 +128,7 @@ async def create_session(interaction: discord.Interaction, date_time: str, locat
     max_players : int
         The maximum number of players allowed in the session.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     session_data = {
         'datetime': date_time,
@@ -174,7 +173,7 @@ async def list_sessions(interaction: discord.Interaction):
         The interaction object.
     """
     supabase_client = get_supabase_client()
-    sessions = supabase_client.table('sessions').select('*').order('id', desc=True).limit(5).execute().data
+    sessions = supabase_client.table('sessions').select('*').neq('completed', True).order('id', desc=True).limit(5).execute().data
 
     session_embed = discord.Embed(title="Upcoming Volleyball Sessions", color=0x00ff00)
     for session in sessions:
@@ -192,10 +191,27 @@ async def delete_session(interaction: discord.Interaction, session_id: int):
     session_id : int
         The ID of the session to delete.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     supabase_client.table('rsvps').delete().eq('session_id', session_id).execute()
     supabase_client.table('sessions').delete().eq('id', session_id).execute()
     await interaction.response.send_message(f"Session {session_id} has been deleted.")
+
+@bot.tree.command(name="end-session",description="End a volleyball session.")
+async def end_session(interaction: discord.Interaction, session_id: int):
+    """
+    Ends a volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session to end.
+    """
+    if not await has_planner_role_interaction(interaction): return
+    supabase_client = get_supabase_client()
+    supabase_client.table('sessions').update({'completed': True}).eq('id', session_id).execute()
+    await interaction.response.send_message(f"Session {session_id} has been ended.")
 
 @bot.tree.command(name="add-players", description="Add players to the volleyball session player list.")
 async def add_players(interaction: discord.Interaction, session_id: int, players: str):
@@ -210,6 +226,7 @@ async def add_players(interaction: discord.Interaction, session_id: int, players
     players : list[int]
         The list of player IDs to add.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     # Get the list of players from string of mentions
     players = [int(re.findall(r'\d+', player)[0]) for player in players.split()]
@@ -231,6 +248,7 @@ async def remove_players(interaction: discord.Interaction, session_id: int, play
     players : list[int]
         The list of player IDs to remove.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     # Get the list of players from string of mentions
     players = [int(re.findall(r'\d+', player)[0]) for player in players.split()]
@@ -270,6 +288,8 @@ async def create_teams(interaction: discord.Interaction, session_id: int, num_te
     num_teams : int
         The number of teams to create.
     """
+    if not await has_planner_role_interaction(interaction): return
+    await interaction.response.defer()
     supabase_client = get_supabase_client()
     supabase_client.table('team_members').delete().neq('id', -1).execute()
     supabase_client.table('matches').delete().eq('session_id', session_id).execute()
@@ -291,7 +311,7 @@ async def create_teams(interaction: discord.Interaction, session_id: int, num_te
     for team_member_ids in teams:
         team_members = [interaction.guild.get_member(user_id).mention for user_id in team_member_ids]
         embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value=", ".join(team_members), inline=False)
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="create-balanced-teams", description="Create balanced teams for the volleyball session.")
 async def create_balanced_teams(interaction: discord.Interaction, session_id: int, num_teams: int = 2):
@@ -306,6 +326,7 @@ async def create_balanced_teams(interaction: discord.Interaction, session_id: in
     num_teams : int
         The number of teams to create.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     supabase_client.table('team_members').delete().neq('id', -1).execute()
     supabase_client.table('matches').delete().eq('session_id', session_id).execute()
@@ -343,12 +364,10 @@ async def list_teams(interaction: discord.Interaction, session_id: int):
     """
     supabase_client = get_supabase_client()
     teams = supabase_client.table('teams').select('*').eq('session_id', session_id).execute().data
-    team_display = ""
     embed = discord.Embed(title=f"Session {session_id} Teams")
     for team in teams:
         team_members = supabase_client.table('team_members').select('user_id').eq('team_id', team['id']).execute().data
         embed.add_field(name=f"Team {team['team_number']}", value=", ".join([interaction.guild.get_member(member['user_id']).mention for member in team_members]), inline=False)
-        # team_display += f"Team {team['team_number']} ({team['id']}): {', '.join([interaction.guild.get_member(member['user_id']).name for member in team_members])}\n"
     await interaction.response.send_message(embed=embed or "No teams found.")
 
 @bot.tree.command(name="move-player", description="Move a player from one team to another team")
@@ -366,6 +385,7 @@ async def move_player(interaction: discord.Interaction, session_id: int, player:
     team_number : int
         The number of the team to move the player to.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     team = supabase_client.table('teams').select('id').eq('session_id', session_id).eq('team_number', team_number).execute().data[0]
     supabase_client.table('team_members').update({'team_id': team['id']}).eq('user_id', player.id).execute()
@@ -386,6 +406,7 @@ async def create_group(interaction: discord.Interaction, session_id: int, group_
     members : str
         The list of members in the group.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     # Create a new group
     group = supabase_client.table('player_groups').insert({
@@ -417,7 +438,6 @@ async def list_groups(interaction: discord.Interaction, session_id: int):
     """
     supabase_client = get_supabase_client()
     groups = supabase_client.table('player_groups').select('*').eq('session_id', session_id).execute().data
-    group_display = ""
     embed = discord.Embed(title=f"Session {session_id} Groups")
     for group in groups:
         group_members = supabase_client.table('player_group_members').select('user_id').eq('group_id', group['id']).execute().data
@@ -437,6 +457,7 @@ async def add_group_members(interaction: discord.Interaction, group_id: int, mem
     members : str
         The list of members to add to the group.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     members = [int(re.findall(r'\d+', member)[0]) for member in members.split()]
     members_mention = [interaction.guild.get_member(member).mention for member in members]
@@ -462,6 +483,7 @@ async def remove_group_members(interaction: discord.Interaction, group_id: int, 
     members : str
         The list of members to remove from the group.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     members = [int(re.findall(r'\d+', member)[0]) for member in members.split()]
     members_mention = [interaction.guild.get_member(member).mention for member in members]
@@ -481,6 +503,7 @@ async def delete_group(interaction: discord.Interaction, group_id: int):
     group_id : int
         The ID of the group to delete.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     supabase_client.table('player_group_members').delete().eq('group_id', group_id).execute()
     supabase_client.table('player_groups').delete().eq('id', group_id).execute()
@@ -488,6 +511,20 @@ async def delete_group(interaction: discord.Interaction, group_id: int):
 
 @bot.tree.command(name="create-match", description="Creates a match for the volleyball session.")
 async def create_match(interaction: discord.Interaction, session_id: int, team_1: int, team_2: int):
+    """
+    Creates a match for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    team_1 : int
+        The number of the first team.
+    team_2 : int
+        The number of the second team.
+    """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     teams = supabase_client.table('teams').select('id, team_number').eq('session_id', session_id).execute().data
     team_1_id = next(team['id'] for team in teams if team['team_number'] == team_1)
@@ -498,11 +535,19 @@ async def create_match(interaction: discord.Interaction, session_id: int, team_1
         'team1_id': team_1_id,
         'team2_id': team_2_id,
     }).execute()
-    # Calculate ELO
     await interaction.response.send_message(f"Match created with for Team {team_1} against {team_2}. Good luck!")
 
 @bot.tree.command(name="list-matches", description="List the matches scheduled for the volleyball session.")
 async def list_matches(interaction: discord.Interaction, session_id: int):
+    """
+    Lists the matches scheduled for the volleyball session.
+    Parameters
+    ----------
+    interaction : discord.Interaction
+        The interaction object.
+    session_id : int
+        The ID of the session.
+    """
     supabase_client = get_supabase_client()
     # Get all matches for the session
     matches = supabase_client.table('matches').select('*').eq('session_id', session_id).neq('completed', True).execute().data
@@ -539,6 +584,7 @@ async def winner(interaction: discord.Interaction, session_id: int, match_number
     winning_team_number : int
         The number of the winning team.
     """
+    if not await has_planner_role_interaction(interaction): return
     supabase_client = get_supabase_client()
     match = supabase_client.table('matches').select('*').eq('session_id', session_id).eq('id', match_number).neq('completed', True).execute().data
     if not match:
