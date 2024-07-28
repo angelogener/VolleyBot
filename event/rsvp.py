@@ -66,6 +66,7 @@ async def remove_rsvp_db(message, payload):
 async def update_rsvp_message(message):
     supabase_client = get_supabase_client()
     session = supabase_client.table('sessions').select('location, datetime, max_players, rsvps(user_id, order_position, status)').eq('rsvp_message_id', message.id).neq('completed', True).execute().data
+    print(session)
     if not session:
         return
     confirmed_ids = []
@@ -75,6 +76,7 @@ async def update_rsvp_message(message):
             confirmed_ids.append(rsvp['user_id'])
         else:
             waitlist_ids.append(rsvp['user_id'])
+    print(confirmed_ids, waitlist_ids)
     event_embed = discord.Embed(
                 title="Volleyball Session", color=0x00ff00
             ).add_field(
