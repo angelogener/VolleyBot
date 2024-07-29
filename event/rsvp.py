@@ -81,13 +81,12 @@ async def update_rsvp_message(message):
     # Get all the members to extract their name and/or mention
     confirmed_members = []
     waitlist_members = []
-    async for member in message.guild.fetch_members():
-        if member.id in confirmed_ids:
-            confirmed_members.append(member)
-        if member.id in waitlist_ids:
-            waitlist_members.append(member)
-    confirmed_members.sort(key=lambda member: confirmed_ids.index(member.id))
-    waitlist_members.sort(key=lambda member: waitlist_ids.index(member.id))
+    for id in confirmed_ids:
+        member = await message.guild.fetch_member(id)
+        confirmed_members.append(member)
+    for id in waitlist_ids:
+        member = await message.guild.fetch_member(id)
+        waitlist_members.append(member)
 
     event_embed = discord.Embed(
                 title="Volleyball Session", color=0x00ff00
