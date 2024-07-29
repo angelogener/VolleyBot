@@ -76,7 +76,19 @@ async def update_rsvp_message(message):
             confirmed_ids.append(rsvp['user_id'])
         else:
             waitlist_ids.append(rsvp['user_id'])
-    print(confirmed_ids, waitlist_ids)
+    print("confirmed: ", confirmed_ids)
+    print("waitlist: ", waitlist_ids)
+    # Get all the members to extract their name and/or mention
+    confirmed_members = []
+    waitlist_members = []
+    async for member in message.guild.fetch_members():
+        if member.id in confirmed_ids:
+            confirmed_members.append(member)
+        if member.id in waitlist_ids:
+            waitlist_members.append(member)
+    confirmed_members.sort(key=lambda member: confirmed_ids.index(member.id))
+    waitlist_members.sort(key=lambda member: waitlist_ids.index(member.id))
+
     event_embed = discord.Embed(
                 title="Volleyball Session", color=0x00ff00
             ).add_field(
@@ -93,7 +105,7 @@ async def update_rsvp_message(message):
                 inline=False
             ).add_field(
                 name="RSVP",
-                value=f"Confirmed: {', '.join(f'<@{player}>' for player in confirmed_ids)}\nWaitlist: {', '.join(f'<@{player}>' for player in waitlist_ids)}",
+                value="Confirmed:\n" + ', \n'.join(f'{member.name} ({member.mention})' for member in confirmed_members) + "\n\nWaitlist:\n"+ ', '.join(f'<@{player}>' for player in waitlist_ids),
                 inline=False
             ).set_footer(
                 text="React with a ✅ to RSVP. If you can no longer make it react with a ❌ to give up your spot to someone else!"
