@@ -319,8 +319,11 @@ async def create_teams(interaction: discord.Interaction, session_id: int, num_te
     # Display teams
     embed = discord.Embed(title=f"Session {session_id} Teams", color=0x00ff00)
     for team_member_ids in teams:
-        team_members = [interaction.guild.get_member(user_id).mention for user_id in team_member_ids]
-        embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value=", ".join(team_members), inline=False)
+        team_members = [await interaction.guild.fetch_member(user_id) for user_id in team_member_ids]
+        team_members_name = [member.name for member in team_members]
+        team_members_mention = [member.mention for member in team_members]
+        team_members_name_mention = [f"{team_members_name[i]} ({team_members_mention[i]})" for i in range(len(team_members_name))]
+        embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value="\n".join(team_members_name_mention), inline=False)
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="create-balanced-teams", description="Create balanced teams for the volleyball session.")
@@ -357,8 +360,11 @@ async def create_balanced_teams(interaction: discord.Interaction, session_id: in
     # Display teams
     embed = discord.Embed(title=f"Session {session_id} Teams", color=0x00ff00)
     for team_member_ids in teams:
-        team_members = [interaction.guild.get_member(user_id).mention for user_id in team_member_ids]
-        embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value=", ".join(team_members), inline=False)
+        team_members = [await interaction.guild.fetch_member(user_id) for user_id in team_member_ids]
+        team_members_name = [member.name for member in team_members]
+        team_members_mention = [member.mention for member in team_members]
+        team_members_name_mention = [f"{team_members_name[i]} ({team_members_mention[i]})" for i in range(len(team_members_name))]
+        embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value="\n".join(team_members_name_mention), inline=False)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="list-teams", description="List the teams for the volleyball session.")

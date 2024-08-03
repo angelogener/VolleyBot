@@ -36,8 +36,8 @@ CREATE TABLE team_members (
 
 -- Create users table
 CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    discord_id BIGINT UNIQUE NOT NULL,
+    id BIGINT PRIMARY KEY,
+    -- discord_id BIGINT UNIQUE NOT NULL,
     elo INTEGER DEFAULT 1000
 );
 
