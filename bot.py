@@ -262,7 +262,7 @@ async def remove_players(interaction: discord.Interaction, session_id: int, play
     supabase_client = get_supabase_client()
     # Get the list of players from string of mentions
     players = [int(re.findall(r'\d+', player)[0]) for player in players.split()]
-    player_names = [interaction.guild.get_member(player).name for player in players]
+    player_names = [await interaction.guild.fetch_member(player).name for player in players]
     for player in players:
         supabase_client.table('rsvps').delete().eq('session_id', session_id).eq('user_id', player).execute()
     await interaction.response.send_message(f"Players {', '.join(player_names)} have been removed from session {session_id}.")
@@ -457,7 +457,7 @@ async def list_groups(interaction: discord.Interaction, session_id: int):
     embed = discord.Embed(title=f"Session {session_id} Groups")
     for group in groups:
         group_members = supabase_client.table('player_group_members').select('user_id').eq('group_id', group['id']).execute().data
-        embed.add_field(name=f"Group {group['group_name']}", value=", ".join([interaction.guild.get_member(member['user_id']).mention for member in group_members]), inline=False)
+        embed.add_field(name=f"Group {group['group_name']} ({group['id']})", value=", ".join([interaction.guild.get_member(member['user_id']).mention for member in group_members]), inline=False)
     await interaction.response.send_message(embed=embed or "No groups found.")
 
 @bot.tree.command(name="add-group-members", description="Add members to a group.")
