@@ -1,0 +1,14 @@
+[project]
+name = "volleybot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "discord-py>=2.4.0",
+    "supabase>=2.7.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
