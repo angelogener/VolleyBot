@@ -601,6 +601,7 @@ async def winner(interaction: discord.Interaction, session_id: int, match_number
         The number of the winning team.
     """
     if not await has_planner_role_interaction(interaction): return
+    await interaction.defer()
     supabase_client = get_supabase_client()
     match = supabase_client.table('matches').select('*').eq('session_id', session_id).eq('id', match_number).neq('completed', True).execute().data
     if not match:
@@ -613,7 +614,7 @@ async def winner(interaction: discord.Interaction, session_id: int, match_number
     update_elo(winning_team_id, losing_team_id)
     supabase_client.table('matches').update({'completed': True, 'winner_id': winning_team_id}).eq('id', match['id']).execute()
 
-    await interaction.response.send_message(f"Team {winning_team_number} has been declared the winner for Match {match_number}, congrats!")
+    await interaction.followup.send(f"Team {winning_team_number} has been declared the winner for Match {match_number}, congrats!")
 
 def run_bot():
     bot.run(TOKEN)
