@@ -340,6 +340,7 @@ async def create_balanced_teams(interaction: discord.Interaction, session_id: in
         The number of teams to create.
     """
     if not await has_planner_role_interaction(interaction): return
+    await interaction.response.defer()
     supabase_client = get_supabase_client()
     supabase_client.table('team_members').delete().neq('id', -1).execute()
     supabase_client.table('matches').delete().eq('session_id', session_id).execute()
@@ -365,7 +366,7 @@ async def create_balanced_teams(interaction: discord.Interaction, session_id: in
         team_members_mention = [member.mention for member in team_members]
         team_members_name_mention = [f"{team_members_name[i]} ({team_members_mention[i]})" for i in range(len(team_members_name))]
         embed.add_field(name=f"Team {teams.index(team_member_ids) + 1}", value="\n".join(team_members_name_mention), inline=False)
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="list-teams", description="List the teams for the volleyball session.")
 async def list_teams(interaction: discord.Interaction, session_id: int):
