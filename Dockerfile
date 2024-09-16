@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM python:3.13.0rc1-slim
 ENV TZ="America/New_York"
 WORKDIR /usr/src/app
 COPY ./requirements.txt ./
