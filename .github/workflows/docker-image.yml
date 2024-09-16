@@ -15,6 +15,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag volleybot:$(date +%s)
+      run: docker build . --file Dockerfile --tag volleybot:latest
     - name: Push the Docker image
-      run: docker push ashpan/volleybot:${date +%s)
+      run: docker push ashpan/volleybot:latest
